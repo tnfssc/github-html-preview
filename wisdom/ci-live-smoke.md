@@ -26,3 +26,12 @@ Live GitHub DOM/network may change again. When retained metadata cannot identify
 ## Integration
 
 The fix was cherry-picked to `develop` as `215e063`. Version is now `0.6.2` (`3202cd0`). The parent reviewed the parser and regression tests. Local archive checks and GitHub CI/live smoke must pass before the stable tag is pushed. Initial values were drawn from this diagnosis; no older wisdom existed.
+
+## Released 2026-09-30
+
+- Pushed `develop` through `3b3b4a1` and tagged that tested commit as `v0.6.2`.
+- GitHub checks passed: CI `36722787427`, unchanged live smoke `36722788136`, nightly `36722787473`, stable release `36723064621`.
+- Parent also passed frozen install, typecheck, 75 unit tests, ZIP build, version contract, and exact-ZIP extension smoke.
+- Stable release: https://github.com/tnfssc/html-preview/releases/tag/v0.6.2. Asset: `github-html-preview-0.6.2-chrome.zip` (150416 bytes).
+- Follow-up: CI debug-artifact reported no ZIP at its upload step even though that job passed; stable/nightly release assets did publish. Actions also warn about Node 20 action runtimes and the coming ubuntu-latest image change. These did not block this release.
+- Values: added the small source/route ownership and trace-first checks above. Release review adds no new value. This final note is docs-only and skips CI to avoid another nightly release.
