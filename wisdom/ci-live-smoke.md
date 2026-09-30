@@ -22,3 +22,7 @@ Live GitHub DOM/network may change again. When retained metadata cannot identify
 
 - Worktree: `/home/tnfssc/.die/worktrees/html-preview-b71d59ffacdb-task_bbe791b2`
 - Branch: `die/fix-live-smoke-failure-bbe791b2`
+
+## Integration
+
+The fix was cherry-picked to `develop` as `215e063`. Version is now `0.6.2` (`3202cd0`). The parent reviewed the parser and regression tests. Local archive checks and GitHub CI/live smoke must pass before the stable tag is pushed. Initial values were drawn from this diagnosis; no older wisdom existed.
