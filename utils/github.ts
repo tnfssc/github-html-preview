@@ -143,10 +143,11 @@ export function extractBlobPageData(): BlobPageData {
     const payload = record(root)?.payload;
     const payloadRecord = record(payload);
     const fallbackRef = fallback;
-    const repo = record(payloadRecord?.repo);
+    const layout = record(payloadRecord?.codeViewLayoutRoute) ?? payloadRecord;
+    const repo = record(layout?.repo);
     const isPrivate =
       booleanValue(repo?.isPrivate) ?? booleanValue(repo?.private) ?? false;
-    const refInfo = record(payloadRecord?.refInfo);
+    const refInfo = record(layout?.refInfo);
     const styledBlob = record(
       payloadRecord?.['codeViewBlobLayoutRoute.StyledBlob'],
     );
@@ -165,8 +166,21 @@ export function extractBlobPageData(): BlobPageData {
       stringValue(refInfo?.name) ??
       fallbackRef?.ref;
     const embeddedPath =
-      stringValue(payloadRecord?.path) ??
+      stringValue(layout?.path) ??
       stringValue(styledBlob?.path);
+    // GitHub retains the initial embedded payload during SPA navigation. The
+    // cursor textarea can also still contain the previous file while React
+    // commits the new route. Never combine that source/commit with a new path.
+    if (embeddedPath && !pathMatchesLocation(embeddedPath)) {
+      return {
+        html: null,
+        repoRef: fallback,
+        isPrivate,
+        source: fallback ? 'url-fallback' : 'unavailable',
+        diagnostic:
+          'GitHub embedded data belongs to another file; preview fetches the current route instead.',
+      };
+    }
     const path =
       embeddedPath && pathMatchesLocation(embeddedPath)
         ? embeddedPath

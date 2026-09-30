@@ -1421,7 +1421,7 @@ test('commit pages render HTML fallbacks when GitHub omits large diffs', async (
   }
 });
 
-test('SPA navigation renders only the newly selected file', async () => {
+test('SPA navigation rejects stale embedded data and cursor source', async () => {
   const slowHtml =
     '<!doctype html><html><body><h2 id="file-a">File A</h2><img src="./slow.png"></body></html>';
   const nextHtml =
@@ -1432,36 +1432,44 @@ test('SPA navigation renders only the newly selected file', async () => {
   const { context, page } = await launchWithExtension();
   try {
     await routeProductFixtures(context, slowHtml);
+    const fetched: string[] = [];
+    await context.route(
+      'https://raw.githubusercontent.com/acme/reports/main/reports/daily/index.html',
+      async (route) => {
+        fetched.push(route.request().url());
+        await route.fulfill({ contentType: 'text/html', body: nextHtml });
+      },
+    );
     await page.goto(blobUrl, { waitUntil: 'domcontentloaded' });
     await page.getByRole('tab', { name: 'Preview' }).click();
     await expect(page.locator('.gh-html-preview-container').getByRole('status')).toBeHidden();
 
+    await page.evaluate((html) => {
+      const textarea = document.createElement('textarea');
+      textarea.setAttribute('aria-label', 'file content');
+      textarea.value = html;
+      document.querySelector('.react-code-lines')!.append(textarea);
+    }, slowHtml);
+
     await page.evaluate(
-      ({ url, html }) => {
+      ({ url }) => {
         history.pushState({}, '', url);
-        const source = document.querySelector('.react-code-lines');
-        if (source) {
-          const textarea = document.createElement('textarea');
-          textarea.setAttribute('aria-label', 'file content');
-          textarea.value = html;
-          source.replaceChildren(textarea);
-        }
         window.dispatchEvent(new Event('wxt:locationchange'));
       },
-      {
-        url: nextUrl,
-        html: nextHtml,
-      },
+      { url: nextUrl },
     );
 
     const nextPreview = page.getByRole('tab', { name: 'Preview' });
     await expect(nextPreview).toHaveCount(1);
-    await nextPreview.click();
+    // Active Preview survives navigation without another click.
     const frame = page
       .locator('.gh-html-preview-container iframe[title="Executable HTML preview"]')
       .contentFrame();
     await expect(frame.locator('#file-b')).toHaveText('File B');
     await expect(frame.locator('#file-a')).toHaveCount(0);
+    expect(fetched).toHaveLength(1);
+    await expect(nextPreview).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.gh-html-preview-container iframe')).toHaveAttribute('sandbox', 'allow-scripts');
   } finally {
     await context.close();
   }
@@ -1786,15 +1794,16 @@ function githubEmbeddedPayload(
 ): string {
   return JSON.stringify({
     payload: {
-      repo: {
-        ownerLogin: owner,
-        name: repo,
-        isPrivate,
-      },
-      refInfo: { currentOid: oid, name: 'main' },
-      path: filePath,
-      'codeViewBlobLayoutRoute.StyledBlob': {
+      codeViewLayoutRoute: {
+        repo: {
+          ownerLogin: owner,
+          name: repo,
+          isPrivate,
+        },
+        refInfo: { currentOid: oid, name: 'main' },
         path: filePath,
+      },
+      'codeViewBlobLayoutRoute.StyledBlob': {
         rawLines: html.split('\n'),
       },
     },
