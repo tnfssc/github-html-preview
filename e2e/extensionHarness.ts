@@ -1,4 +1,9 @@
-import { chromium, type BrowserContext, type Page } from '@playwright/test';
+import {
+  chromium,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type Page,
+} from '@playwright/test';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -10,13 +15,16 @@ const pathToExtension =
 
 const EXTENSION_ID_DISCOVERY_TIMEOUT_MS = 15_000;
 
-export async function launchWithExtension(): Promise<{
+export async function launchWithExtension(options?: {
+  colorScheme?: BrowserContextOptions['colorScheme'];
+}): Promise<{
   context: BrowserContext;
   page: Page;
   extensionId: string;
 }> {
   const profileDir = `/tmp/playwright-gh-html-preview-${randomUUID()}`;
   const context = await chromium.launchPersistentContext(profileDir, {
+    colorScheme: options?.colorScheme,
     headless: false,
     recordVideo: process.env.RECORD_E2E
       ? {

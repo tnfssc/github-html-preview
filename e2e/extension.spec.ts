@@ -197,6 +197,58 @@ test('blob preview embeds local CSS and executable script sources in a sandbox',
   }
 });
 
+test('previews keep dark media queries independent of GitHub and full-page themes', async () => {
+  // Use native iframe color-scheme inheritance; Playwright's default light
+  // emulation would hide the regression by forcing every frame to light.
+  const { context, page } = await launchWithExtension({ colorScheme: null });
+  try {
+    await routeProductFixtures(context, `<!doctype html><html><head><style>
+      @media (prefers-color-scheme: dark) { body { color: white; } }
+      .authored-dark { background: #111; color: #eee; }
+    </style></head><body>
+      <p id="theme-text">Readable preview text</p>
+      <p class="authored-dark">Author-defined dark styling</p>
+    </body></html>`);
+    await page.goto(blobUrl, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = 'dark';
+      document.documentElement.style.setProperty('--bgColor-default', '#111');
+    });
+    await page.getByRole('tab', { name: 'Preview' }).click();
+
+    const inline = page
+      .locator('iframe[title="Executable HTML preview"]')
+      .contentFrame();
+    await expect(inline.locator('#theme-text')).toHaveCSS('color', 'rgb(0, 0, 0)');
+    expect(await inline.locator('body').evaluate(() =>
+      matchMedia('(prefers-color-scheme: dark)').matches,
+    )).toBe(false);
+    await expect(inline.locator('.authored-dark')).toHaveCSS('color', 'rgb(238, 238, 238)');
+    await expect(inline.locator('.authored-dark')).toHaveCSS('background-color', 'rgb(17, 17, 17)');
+
+    const fullLink = page.getByRole('link', { name: 'Open full preview' });
+    await expect(fullLink).toHaveAttribute('href', /preview\.html\?snapshot=/);
+    const popupPromise = context.waitForEvent('page');
+    await fullLink.click();
+    const fullPage = await popupPromise;
+    const full = fullPage
+      .locator('iframe[title="Executable HTML preview"]')
+      .contentFrame();
+    await expect(full.locator('#theme-text')).toBeVisible();
+    await fullPage.evaluate(() => {
+      document.documentElement.style.colorScheme = 'dark';
+    });
+    await expect(full.locator('#theme-text')).toHaveCSS('color', 'rgb(0, 0, 0)');
+    expect(await full.locator('body').evaluate(() =>
+      matchMedia('(prefers-color-scheme: dark)').matches,
+    )).toBe(false);
+    await expect(full.locator('.authored-dark')).toHaveCSS('color', 'rgb(238, 238, 238)');
+    await expect(full.locator('.authored-dark')).toHaveCSS('background-color', 'rgb(17, 17, 17)');
+  } finally {
+    await context.close();
+  }
+});
+
 test('blob resources recover after three automatic retries', async () => {
   const { context, page } = await launchWithExtension();
   const url = 'https://github.com/acme/reports/blob/main/retry.html';

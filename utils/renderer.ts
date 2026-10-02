@@ -47,6 +47,8 @@ export function renderExecutablePreview(
   iframe.style.height = options?.height ?? '100%';
   iframe.style.display = 'block';
   iframe.style.border = 'none';
+  // Keep GitHub's theme from activating dark rules against a light document canvas.
+  iframe.style.colorScheme = 'light';
   container.replaceChildren(iframe);
   const htmlReady = options?.onScroll
     ? installScrollBridge(result.html, channel).catch(() => result.html)
