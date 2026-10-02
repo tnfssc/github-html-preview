@@ -54,6 +54,8 @@ jobs:
         with:
           name: chrome-stable-archive
           path: .output/*-chrome.zip
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
 
   debug-artifact:
@@ -93,4 +95,6 @@ jobs:
         with:
           name: chrome-debug-archive
           path: .output/*-chrome-debug.zip
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
