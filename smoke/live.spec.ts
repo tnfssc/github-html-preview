@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { launchWithExtension } from '../e2e/extensionHarness';
 
+// Retry live GitHub checks in CI when the remote service fails intermittently.
+test.describe.configure({ retries: process.env.CI ? 2 : 0 });
+
 const blobUrl =
   'https://github.com/mdn/learning-area/blob/main/html/introduction-to-html/document_and_website_structure/index.html';
 const prUrl = 'https://github.com/mdn/learning-area/pull/846/files';
