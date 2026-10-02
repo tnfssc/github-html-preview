@@ -79,6 +79,8 @@ Design follows established diff-view behavior: CodeMirror aligns unchanged conte
 
 ## Development
 
+Use Node.js 22.12+ and pnpm 11.28.3 (pinned in `package.json`).
+
 ```bash
 pnpm install
 pnpm run compile

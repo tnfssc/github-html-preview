@@ -1,5 +1,5 @@
 import { buildJsdelivrUrl, fetchRepositoryBytes } from './github';
-import { parse } from 'es-module-lexer/js';
+import { parse } from 'es-module-lexer/minimal/js';
 import { debugError, debugLog } from './debug';
 import type {
   RepoRef,

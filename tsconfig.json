@@ -2,6 +2,8 @@
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
+    // Preserve the project's indexed-access checks across the WXT 0.21 upgrade.
+    "noUncheckedIndexedAccess": false,
     "jsx": "react-jsx"
   }
 }
