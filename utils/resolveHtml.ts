@@ -177,6 +177,15 @@ export async function resolveHtml(
     await resolvePrivateSandboxDocument(doc, sourcePath, loader);
   }
 
+  // Match the default document canvas and text to the frame's dark preference.
+  // Authored metadata and CSS can still select their own color scheme.
+  if (!doc.querySelector('meta[name="color-scheme" i]')) {
+    const colorScheme = doc.createElement('meta');
+    colorScheme.name = 'color-scheme';
+    colorScheme.content = 'dark';
+    doc.head.appendChild(colorScheme);
+  }
+
   options.signal?.throwIfAborted();
   const resolvedHtml = `<!doctype html>\n${doc.documentElement.outerHTML}`;
   const outputBytes = new TextEncoder().encode(resolvedHtml).byteLength;

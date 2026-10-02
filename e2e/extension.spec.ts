@@ -1,4 +1,4 @@
-import { test, expect, type BrowserContext } from '@playwright/test';
+import { test, expect, type BrowserContext, type FrameLocator } from '@playwright/test';
 import { launchWithExtension } from './extensionHarness';
 const commit = '0123456789abcdef0123456789abcdef01234567';
 const blobUrl =
@@ -197,7 +197,7 @@ test('blob preview embeds local CSS and executable script sources in a sandbox',
   }
 });
 
-test('previews keep dark media queries independent of GitHub and full-page themes', async () => {
+test('previews default to dark media queries and a matching canvas independently of host themes', async () => {
   // Use native iframe color-scheme inheritance; Playwright's default light
   // emulation would hide the regression by forcing every frame to light.
   const { context, page } = await launchWithExtension({ colorScheme: null });
@@ -205,26 +205,31 @@ test('previews keep dark media queries independent of GitHub and full-page theme
     await routeProductFixtures(context, `<!doctype html><html><head><style>
       @media (prefers-color-scheme: dark) { body { color: white; } }
       .authored-dark { background: #111; color: #eee; }
+      .authored-light { background: white; color: black; }
     </style></head><body>
       <p id="theme-text">Readable preview text</p>
       <p class="authored-dark">Author-defined dark styling</p>
+      <p class="authored-light">Author-defined light styling</p>
     </body></html>`);
     await page.goto(blobUrl, { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
-      document.documentElement.style.colorScheme = 'dark';
-      document.documentElement.style.setProperty('--bgColor-default', '#111');
+      document.documentElement.style.colorScheme = 'light';
+      document.documentElement.style.setProperty('--bgColor-default', '#fff');
     });
     await page.getByRole('tab', { name: 'Preview' }).click();
 
     const inline = page
       .locator('iframe[title="Executable HTML preview"]')
       .contentFrame();
-    await expect(inline.locator('#theme-text')).toHaveCSS('color', 'rgb(0, 0, 0)');
+    await expect(inline.locator('#theme-text')).toHaveCSS('color', 'rgb(255, 255, 255)');
     expect(await inline.locator('body').evaluate(() =>
       matchMedia('(prefers-color-scheme: dark)').matches,
-    )).toBe(false);
+    )).toBe(true);
+    await expectDarkCanvas(inline);
     await expect(inline.locator('.authored-dark')).toHaveCSS('color', 'rgb(238, 238, 238)');
     await expect(inline.locator('.authored-dark')).toHaveCSS('background-color', 'rgb(17, 17, 17)');
+    await expect(inline.locator('.authored-light')).toHaveCSS('color', 'rgb(0, 0, 0)');
+    await expect(inline.locator('.authored-light')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
     const fullLink = page.getByRole('link', { name: 'Open full preview' });
     await expect(fullLink).toHaveAttribute('href', /preview\.html\?snapshot=/);
@@ -236,18 +241,63 @@ test('previews keep dark media queries independent of GitHub and full-page theme
       .contentFrame();
     await expect(full.locator('#theme-text')).toBeVisible();
     await fullPage.evaluate(() => {
-      document.documentElement.style.colorScheme = 'dark';
+      document.documentElement.style.colorScheme = 'light';
     });
-    await expect(full.locator('#theme-text')).toHaveCSS('color', 'rgb(0, 0, 0)');
+    await expect(full.locator('#theme-text')).toHaveCSS('color', 'rgb(255, 255, 255)');
     expect(await full.locator('body').evaluate(() =>
       matchMedia('(prefers-color-scheme: dark)').matches,
-    )).toBe(false);
+    )).toBe(true);
+    await expectDarkCanvas(full);
     await expect(full.locator('.authored-dark')).toHaveCSS('color', 'rgb(238, 238, 238)');
     await expect(full.locator('.authored-dark')).toHaveCSS('background-color', 'rgb(17, 17, 17)');
+    await expect(full.locator('.authored-light')).toHaveCSS('color', 'rgb(0, 0, 0)');
+    await expect(full.locator('.authored-light')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   } finally {
     await context.close();
   }
 });
+
+async function expectDarkCanvas(frame: FrameLocator): Promise<void> {
+  const canvas = await frame.locator('body').evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'Canvas';
+    document.body.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color.match(/\d+/g)?.map(Number) ?? [];
+  });
+  expect(canvas).toHaveLength(3);
+  expect(Math.max(...canvas)).toBeLessThan(128);
+}
+
+for (const [kind, declaration] of [
+  ['metadata', '<meta name="color-scheme" content="light">'],
+  ['CSS', '<style>:root { color-scheme: light; }</style>'],
+]) {
+  test(`previews respect an authored light color scheme from ${kind}`, async () => {
+    const { context, page } = await launchWithExtension({ colorScheme: null });
+    try {
+      await routeProductFixtures(context, `<!doctype html><html><head>${declaration}</head><body>
+        <p id="theme-text">Author-selected light canvas</p>
+      </body></html>`);
+      await page.goto(blobUrl, { waitUntil: 'domcontentloaded' });
+      await page.getByRole('tab', { name: 'Preview' }).click();
+      const frame = page.locator('iframe[title="Executable HTML preview"]').contentFrame();
+      await expect(frame.locator('#theme-text')).toHaveCSS('color', 'rgb(0, 0, 0)');
+      const canvas = await frame.locator('body').evaluate(() => {
+        const probe = document.createElement('span');
+        probe.style.color = 'Canvas';
+        document.body.appendChild(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      });
+      expect(canvas).toBe('rgb(255, 255, 255)');
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 test('blob resources recover after three automatic retries', async () => {
   const { context, page } = await launchWithExtension();

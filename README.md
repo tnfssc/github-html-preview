@@ -7,7 +7,7 @@ Chrome extension for running and comparing commit-pinned public and private `.ht
 - Blob pages get a **Preview** tab beside GitHub's file controls. Repository scripts run in an isolated executable frame; repository CSS and module graphs are packaged against the exact commit.
 - Preview headers disclose **Executable · Scripts and network access on**. Preview code cannot access extension APIs, GitHub's parent DOM, or extension storage, but it can communicate with external services.
 - **Open full preview** opens the same commit-pinned document in a dedicated executable sandbox.
-- Preview frames use a light color scheme so GitHub's theme cannot activate dark-mode media queries against a light document canvas. Explicit colors and backgrounds in the HTML remain intact.
+- Preview frames default to dark media queries and a dark document canvas, independently of GitHub's theme. Authored color-scheme declarations, colors, and backgrounds remain intact.
 - Pull-request, commit, and release-compare file views get lightweight **Code** and **Preview** controls. Comparisons use exact base and head repositories and commits, including forks.
 - Added and deleted files render whichever side exists; edited files render before and after.
 - Private repository assets are packaged as data URLs into the sandbox; public repository subresources are rewritten to commit-pinned CDN URLs (jsDelivr). Both paths are commit-pinned. Fragment links stay inside the preview; links to other repository documents open the exact-ref GitHub blob in a new tab.
