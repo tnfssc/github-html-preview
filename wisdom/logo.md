@@ -8,3 +8,5 @@ Validation: inspect the actual 128px and 16px renders; check PNG dimensions and 
 
 Worktree: `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_47a4d830`.
 Branch: `bruv/redesign-extension-logo-47a4d830`.
+
+Applied to the main thread as `00a7eca`. Reviewed both sizes and ran the generator again; all PNG dimensions match and regeneration leaves no diff. No app tests were run for this asset-only change. Reload the extension to see the new toolbar icon. Values stayed the same: this is a one-time design choice, not a new general lesson.
