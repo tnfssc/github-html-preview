@@ -10,7 +10,7 @@ Source: `assets/logo.svg`. Run `./scripts/generate-icons.sh` to regenerate 16, 3
 
 ## Checks and next step
 
-Reviewed the 128px and actual 16px renders. All PNG dimensions match. Regeneration leaves no diff. `git diff --check` passes. No app tests run for this asset-only change. Reload the extension to see it. Next step: push the branch and open a PR against develop; record the URL here.
+Reviewed the 128px and actual 16px renders. All PNG dimensions match. Regeneration leaves no diff. `git diff --check` passes. No app tests run for this asset-only change. Reload the extension to see it. PR: https://github.com/tnfssc/html-preview/pull/23 (base `develop`, head `t3code/improve-logo`). Linked to the thread. Next step: review CI and merge when ready. No release made.
 
 ## Rejected attempts
 
