@@ -1,14 +1,24 @@
-# Preview logo
+# Preview logo — Unfurl
 
-Use a browser-window silhouette, not code brackets or a mascot: the mark should suggest viewing a page. A dark rounded tile (#18242c), warm white frame (#f4f1e8), and restrained mint play (#9ddbc3) keep it flat and quiet. Broad margins and an 8-unit frame remain legible at 16px; omit tiny browser controls and text.
+## Review state
 
-Source: `assets/logo.svg`. Regenerate all five PNG sizes with `./scripts/generate-icons.sh` (requires local `rsvg-convert` from librsvg). No UI or dependency changes.
+The user rejected the original brackets/play logo, the replacement browser-window/mint-play logo, and all three later options: code eye, angle monogram, and folded code document. None is approved. The old options remain historical artifacts in `assets/logo-options/`; do not recycle them or treat them as current candidates.
 
-Validation: inspect the actual 128px and 16px renders; check PNG dimensions and compare each PNG with a fresh render of the SVG.
+Latest request: “think different.” This is **one new, unapproved abstract direction**, installed as the active assets at the user’s request, not an approved brand decision. “Unfurl” is a direction label, not an application rename.
 
-Worktree: `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_47a4d830`.
-Branch: `bruv/redesign-extension-logo-47a4d830`.
+## Design
 
-Applied to the main thread as `00a7eca`. Reviewed both sizes and ran the generator again; all PNG dimensions match and regeneration leaves no diff. No app tests were run for this asset-only change. Reload the extension to see the new toolbar icon. Values stayed the same: this is a one-time design choice, not a new general lesson.
+A bespoke broad ribbon bends into two unequal planes with an open, asymmetric cut. Its diagonal orientation evokes lifting/unfolding without depicting a software feature. Deep violet (`#262144`) grounds apricot (`#FFB17A`) and persimmon (`#FF714F`). No brackets, slash, eye, browser frame, play glyph, document, mascot, or letter monogram; no gradients or shadows. The generous inset and broad negative space keep the fold readable at toolbar size.
 
-User rejected the browser-window/mint-play design ("nah suks"). Do not treat it as approved. Three distinct options are being explored in `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_f64a3d35`, branch `bruv/explore-three-stronger-logo-directions-f64a3d35`. Keep the active assets untouched until a direction is picked.
+Source: `assets/logo.svg`. Regenerate all five active icons with `./scripts/generate-icons.sh` (local librsvg / `rsvg-convert`). Generator unchanged. No dependencies or UI changes.
+
+Single presentation: `assets/logo-presentation.png` (1200 × 820), showing the same finished direction on light/dark backgrounds and native 16px toolbar renders. It was rendered with `rsvg-convert`; ImageMagick was used for dimensions and a nearest-neighbor small-size inspection.
+
+## Validation and stop point
+
+Inspected the large draft, refined the lower plane and diagonal orientation, then inspected the final presentation and actual 128px/16px renders. All icons are exactly 16, 32, 48, 96, and 128 pixels square. Re-running the generator produced byte-identical PNGs; five independent fresh renders also matched byte-for-byte. `git diff --check` passed. No app tests run: asset-only change.
+
+Worktree: `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_af1dad02`.
+Branch: `bruv/create-abstract-preview-brand-mark-af1dad02`.
+
+Stop point: implementation and presentation ready for user review; this direction remains unapproved. Reload the extension to see the active toolbar icon. Worktree and branch retained. Values unchanged: a specific design decision, not a new general lesson.

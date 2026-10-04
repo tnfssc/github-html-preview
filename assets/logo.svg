@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GitHub HTML Preview logo">
-  <rect x="4" y="4" width="120" height="120" rx="26" fill="#18242c"/>
-  <rect x="24" y="28" width="80" height="72" rx="8" fill="#f4f1e8"/>
-  <rect x="32" y="36" width="64" height="56" rx="2" fill="#18242c"/>
-  <path d="M32 48h64" stroke="#f4f1e8" stroke-width="4"/>
-  <path d="m56 58 22 14-22 14Z" fill="#9ddbc3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="GitHub HTML Preview abstract ribbon mark">
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#262144"/>
+  <g transform="rotate(-28 64 64)">
+    <path d="M34 29 82 25Q86 25 89 29L104 47 55 66 86 97 54 108 27 88 23 63Q22 59 24 54Z" fill="#FF714F"/>
+    <path d="M34 29 82 25Q86 25 89 29L104 47 55 66 23 63Q22 59 24 54Z" fill="#FFB17A"/>
+  </g>
 </svg>
