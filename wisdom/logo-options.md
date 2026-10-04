@@ -12,3 +12,5 @@ These are **options only, not adopted**. The active logo and icon PNGs were not 
 
 Worktree: /home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_f64a3d35
 Branch: bruv/explore-three-stronger-logo-directions-f64a3d35
+
+Parent reviewed the contact sheet. Await the user's A/B/C choice before changing active icons. B has the clearest bold silhouette; C's thin right bracket could use more weight if picked. Values stayed unchanged: these are design options, not a general lesson.
