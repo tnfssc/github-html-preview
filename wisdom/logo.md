@@ -22,3 +22,7 @@ Design worktrees stay available:
 - Approved ribbon and presentation: `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_af1dad02`; branch `bruv/create-abstract-preview-brand-mark-af1dad02`.
 
 Values stayed unchanged: this is a specific design choice, not a new general lesson.
+
+## Release v0.6.5
+
+User asked to merge and release. Bumped package version from 0.6.4 to 0.6.5 before merge so the tag matches the extension manifest. Release workflow runs on pushed `v*` tags and publishes the ZIP only after type checks, unit tests, E2E, version checks, and exact-archive smoke pass. Next: wait for PR checks, squash-merge #23, then tag its merge commit `v0.6.5`. Do not claim publication until the Release workflow and GitHub release are confirmed.
