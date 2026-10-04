@@ -10,3 +10,5 @@ Worktree: `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_47a4d8
 Branch: `bruv/redesign-extension-logo-47a4d830`.
 
 Applied to the main thread as `00a7eca`. Reviewed both sizes and ran the generator again; all PNG dimensions match and regeneration leaves no diff. No app tests were run for this asset-only change. Reload the extension to see the new toolbar icon. Values stayed the same: this is a one-time design choice, not a new general lesson.
+
+User rejected the browser-window/mint-play design ("nah suks"). Do not treat it as approved. Three distinct options are being explored in `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_f64a3d35`, branch `bruv/explore-three-stronger-logo-directions-f64a3d35`. Keep the active assets untouched until a direction is picked.
