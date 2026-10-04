@@ -4,7 +4,7 @@
 
 The user rejected the original brackets/play logo, the replacement browser-window/mint-play logo, and all three later options: code eye, angle monogram, and folded code document. None is approved. The old options remain historical artifacts in `assets/logo-options/`; do not recycle them or treat them as current candidates.
 
-Latest request: “think different.” This is **one new, unapproved abstract direction**, installed as the active assets at the user’s request, not an approved brand decision. “Unfurl” is a direction label, not an application rename.
+Latest request: “think different.” The user approved this abstract direction with “ok lgtm.” It is installed as the active SVG and all five icon sizes. “Unfurl” is a direction label, not an application rename.
 
 ## Design
 
@@ -21,6 +21,6 @@ Inspected the large draft, refined the lower plane and diagonal orientation, the
 Worktree: `/home/tnfssc/.bruv/worktrees/t3code-0f02b118-d4d936df1f38-task_af1dad02`.
 Branch: `bruv/create-abstract-preview-brand-mark-af1dad02`.
 
-Stop point: implementation and presentation ready for user review; this direction remains unapproved. Reload the extension to see the active toolbar icon. Worktree and branch retained. Values unchanged: a specific design decision, not a new general lesson.
+Stop point: implementation and presentation complete; the user approved this direction. Reload the extension to see the active toolbar icon. Worktree and branch retained. Values unchanged: a specific design decision, not a new general lesson.
 
-Parent reviewed the presentation and applied the design in the main thread. Ran the generator again: no PNG diff, and dimensions match. Await user feedback on this abstract direction; no release or user approval claimed.
+Parent reviewed the presentation and applied the design in the main thread. Ran the generator again: no PNG diff, and dimensions match. User approval received: “ok lgtm.” No release was requested or made.
