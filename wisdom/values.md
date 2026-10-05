@@ -7,3 +7,7 @@ A page can keep old data while its URL changes. Check that preview source belong
 ## Keep live failures useful
 
 Read traces before changing a smoke test. Fix a real product fault without weakening its checks. Use a deterministic regression too. A remote outage may need a different fix. See [live smoke](ci-live-smoke.md).
+
+## Remember choices, not startup effects
+
+Read the saved view before mounting. Save explicit user choices, not the automatic default. Keep the local choice current while storage writes finish. This helps views that remount on SPA routes; it does not mean another tab must switch its active view. See [HTML view startup](html-view-startup.md).

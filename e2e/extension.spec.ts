@@ -504,7 +504,7 @@ test('fork PR previews the exact head repository and commit', async () => {
       name: 'Display code diff',
     });
     await expect(richButton).toHaveClass(/BtnGroup-item/);
-    await richButton.click();
+    await expect(richButton).toHaveAttribute('aria-selected', 'true');
     const richContainer = htmlDiff.locator('.gh-html-preview-pr-rich');
     await expect(richContainer.getByRole('status')).toBeHidden();
     const richFrame = richContainer
@@ -618,9 +618,8 @@ test('authenticated changes DOM receives HTML source and rich diff controls', as
     const sourceButton = region.getByRole('tab', {
       name: 'Display code diff',
     });
-    await expect(sourceButton).toHaveAttribute('aria-selected', 'true');
-    await expect(richButton).toHaveAttribute('aria-selected', 'false');
-    await richButton.click();
+    await expect(sourceButton).toHaveAttribute('aria-selected', 'false');
+    await expect(richButton).toHaveAttribute('aria-selected', 'true');
     await expect(richButton).toHaveAttribute('aria-selected', 'true');
     await expect(sourceButton).toHaveAttribute('aria-selected', 'false');
     const richContainer = region.locator('.gh-html-preview-pr-rich');
@@ -795,11 +794,8 @@ test('split comparison represents an added HTML file without failing head previe
 
     await page.goto(prUrl, { waitUntil: 'domcontentloaded' });
     const region = page.locator('[role="region"][id^="diff-"]');
-    await region
-      .getByRole('tab', {
-        name: 'Display before and after previews',
-      })
-      .click();
+    await expect(region.getByRole('tab', { name: 'Display before and after previews' }))
+      .toHaveAttribute('aria-selected', 'true');
     const comparison = region.locator('.gh-html-preview-pr-rich');
     await expect(comparison.getByRole('status')).toBeHidden();
     await expect(
@@ -943,9 +939,8 @@ test('split comparison resolves renamed base paths and deleted head states', asy
 
     await page.goto(renamedUrl, { waitUntil: 'domcontentloaded' });
     let region = page.locator('[role="region"][id^="diff-"]');
-    await region
-      .getByRole('tab', { name: 'Display before and after previews' })
-      .click();
+    await expect(region.getByRole('tab', { name: 'Display before and after previews' }))
+      .toHaveAttribute('aria-selected', 'true');
     let comparison = region.locator('.gh-html-preview-pr-rich');
     await expect(comparison.getByRole('status')).toBeHidden();
     await expect(
@@ -958,9 +953,8 @@ test('split comparison resolves renamed base paths and deleted head states', asy
     const deletedPage = await context.newPage();
     await deletedPage.goto(deletedUrl, { waitUntil: 'domcontentloaded' });
     region = deletedPage.locator('[role="region"][id^="diff-"]');
-    await region
-      .getByRole('tab', { name: 'Display before and after previews' })
-      .click();
+    await expect(region.getByRole('tab', { name: 'Display before and after previews' }))
+      .toHaveAttribute('aria-selected', 'true');
     comparison = region.locator('.gh-html-preview-pr-rich');
     await expect(comparison.getByRole('status')).toBeHidden();
     await expect(
@@ -1005,11 +999,8 @@ test('PR metadata failure leaves the source diff recoverable', async () => {
     const source = region.getByRole('tab', {
       name: 'Display code diff',
     });
-    await region
-      .getByRole('tab', {
-        name: 'Display before and after previews',
-      })
-      .click();
+    await expect(region.getByRole('tab', { name: 'Display before and after previews' }))
+      .toHaveAttribute('aria-selected', 'true');
     const comparison = region.locator('.gh-html-preview-pr-rich');
     await expect(comparison).toContainText(
       'Comparison unavailable. GitHub API returned HTTP 503',
@@ -1139,9 +1130,8 @@ test('private PR first load recovers metadata from the signed-in GitHub page', a
     });
 
     await page.goto(prUrl);
-    await page
-      .getByRole('tab', { name: 'Display before and after previews' })
-      .click();
+    await expect(page.getByRole('tab', { name: 'Display before and after previews' }))
+      .toHaveAttribute('aria-selected', 'true');
     const comparison = page.locator('.gh-html-preview-pr-rich');
     await expect(
       comparison.locator(`iframe[title="Before HTML preview for ${filePath}"]`),
@@ -1245,9 +1235,8 @@ test('private PR renders each added HTML file through the GitHub session', async
     await page.goto(prUrl);
     for (const [index, filePath] of filePaths.entries()) {
       const file = page.locator(`.file[data-path="${filePath}"]`);
-      await file
-        .getByRole('tab', { name: 'Display before and after previews' })
-        .click();
+      await expect(file.getByRole('tab', { name: 'Display before and after previews' }))
+        .toHaveAttribute('aria-selected', 'true');
       const frame = file
         .locator(`iframe[title="After HTML preview for ${filePath}"]`)
         .contentFrame();
@@ -1365,7 +1354,6 @@ test('organization SSO falls back to embedded PR metadata and GitHub session raw
     const previewTab = page.getByRole('tab', {
       name: 'Display before and after previews',
     });
-    await previewTab.click();
     await expect(previewTab).toHaveAttribute('aria-selected', 'true');
     await expect
       .poll(() => [...sessionRequests].sort())
@@ -1509,9 +1497,8 @@ test('commit pages render HTML fallbacks when GitHub omits large diffs', async (
       }),
     ).toHaveCount(3);
     await page.goto(compareUrl);
-    await page
-      .getByRole('tab', { name: 'Display before and after previews' })
-      .click();
+    await expect(page.getByRole('tab', { name: 'Display before and after previews' }))
+      .toHaveAttribute('aria-selected', 'true');
     await expect(
       page.locator('iframe[title="Before HTML preview for long-edited.html"]'),
     ).toHaveCount(1);
@@ -1840,6 +1827,129 @@ test('private blob and full preview use only the signed-in GitHub session', asyn
     ).toBe(false);
     expect(authorizationHeaders).toEqual([]);
   } finally {
+    await context.close();
+  }
+});
+
+test('blob view choice survives different files and reloads without loading hidden previews', async () => {
+  const { context, page, extensionId } = await launchWithExtension();
+  const firstUrl = 'https://github.com/acme/reports/blob/main/first.html';
+  const secondUrl = 'https://github.com/acme/reports/blob/main/second.html';
+  let scriptRequests = 0;
+  const html = '<!doctype html><html><body><h1 id="view-title">Saved view</h1><script src="./view.js"></script></body></html>';
+  try {
+    await context.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url === firstUrl || url === secondUrl) {
+        await route.fulfill({ status: 200, contentType: 'text/html', body: githubBlobFixture(html, commit, url.endsWith('first.html') ? 'first.html' : 'second.html') });
+      } else if (url.includes('/view.js')) {
+        scriptRequests += 1;
+        await route.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.loaded = true;', headers: { 'access-control-allow-origin': '*' } });
+      } else if (url.startsWith('chrome-extension://')) await route.continue();
+      else await route.abort('blockedbyclient');
+    });
+    const settings = await context.newPage();
+    await settings.goto('chrome-extension://' + extensionId + '/popup.html');
+    await page.goto(firstUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#view-title')).toHaveText('Saved view');
+    expect(await settings.evaluate("chrome.storage.local.get('blobViewMode')")).toEqual({});
+
+    await page.getByRole('button', { name: 'Code', exact: true }).click();
+    await expect.poll(() => settings.evaluate("chrome.storage.local.get('blobViewMode')")).toEqual({ blobViewMode: 'source' });
+    const requestsBeforeCode = scriptRequests;
+    // GitHub replaces its DOM while keeping the extension's content script alive.
+    await page.evaluate(({ url, fixture }) => {
+      const next = new DOMParser().parseFromString(fixture, 'text/html');
+      document.querySelector('main')!.replaceWith(next.querySelector('main')!);
+      document.querySelector('[data-target="react-app.embeddedData"]')!.replaceWith(next.querySelector('[data-target="react-app.embeddedData"]')!);
+      history.pushState({}, '', url);
+    }, { url: secondUrl, fixture: githubBlobFixture(html, commit, 'second.html') });
+    await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'false');
+    await expect(page.locator('#source')).toBeVisible();
+    await expect(page.locator('iframe[title="Executable HTML preview"]')).toHaveCount(0);
+    expect(scriptRequests).toBe(requestsBeforeCode);
+
+    await page.goto(firstUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'false');
+    await expect(page.locator('#source')).toBeVisible();
+    expect(scriptRequests).toBe(requestsBeforeCode);
+    await page.getByRole('tab', { name: 'Preview' }).click();
+    await expect.poll(() => settings.evaluate("chrome.storage.local.get('blobViewMode')")).toEqual({ blobViewMode: 'preview' });
+    await page.goto(secondUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#view-title')).toHaveText('Saved view');
+  } finally {
+    await context.close();
+  }
+});
+
+test('PR view choice persists across PRs and added files never load a split placeholder', async () => {
+  const { context, page, extensionId } = await launchWithExtension();
+  const base = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const head = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const filePath = 'added.html';
+  const firstUrl = 'https://github.com/acme/reports/pull/201/changes';
+  const secondUrl = 'https://github.com/acme/reports/pull/202/changes';
+  const headStarted = Promise.withResolvers<void>();
+  const headRelease = Promise.withResolvers<void>();
+  let holdHead = true;
+  const requests: string[] = [];
+  try {
+    await context.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url === firstUrl || url === secondUrl) {
+        await route.fulfill({ status: 200, contentType: 'text/html', body: githubReactPrFixture(filePath) });
+      } else if (url.startsWith('https://api.github.com/repos/acme/reports/pulls/')) {
+        requests.push(url);
+        const data = url.includes('/files?')
+          ? [{ filename: filePath, status: 'added' }]
+          : { base: { sha: base, repo: { full_name: 'acme/reports', private: false } }, head: { sha: head, repo: { full_name: 'acme/reports', private: false } } };
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
+      } else if (url.includes('raw.githubusercontent.com')) {
+        requests.push(url);
+        if (url.includes(base)) await route.fulfill({ status: 404, body: 'missing' });
+        else {
+          headStarted.resolve();
+          if (holdHead) await headRelease.promise;
+          await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html><body><h1 id="pref-head">Added preview</h1></body></html>' });
+        }
+      } else if (url.startsWith('chrome-extension://')) await route.continue();
+      else await route.abort('blockedbyclient');
+    });
+    const settings = await context.newPage();
+    await settings.goto('chrome-extension://' + extensionId + '/popup.html');
+    await page.goto(firstUrl, { waitUntil: 'domcontentloaded' });
+    const preview = page.getByRole('tab', { name: 'Display before and after previews' });
+    const code = page.getByRole('tab', { name: 'Display code diff' });
+    const comparison = page.locator('.gh-html-preview-pr-rich');
+    await expect(preview).toHaveAttribute('aria-selected', 'true');
+    await headStarted.promise;
+    // Slow network must not show two empty side-by-side panes.
+    expect(await comparison.locator('section:visible').count()).toBeLessThanOrEqual(1);
+    expect(await settings.evaluate("chrome.storage.local.get('comparisonPreferences')")).toEqual({});
+    holdHead = false;
+    headRelease.resolve();
+    await expect(comparison.locator('iframe[title="After HTML preview for added.html"]').contentFrame().locator('#pref-head')).toHaveText('Added preview');
+    await expect(comparison.locator('iframe[title="Before HTML preview for added.html"]')).toHaveCount(0);
+
+    await code.click();
+    await expect.poll(() => settings.evaluate("chrome.storage.local.get('comparisonPreferences').then(v => v.comparisonPreferences?.mode)")).toBe('source');
+    const beforeCodeRequests = requests.length;
+    await page.goto(secondUrl, { waitUntil: 'domcontentloaded' });
+    await expect(code).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[data-testid="source-row"]')).toBeVisible();
+    await expect(comparison.locator('iframe')).toHaveCount(0);
+    expect(requests.length).toBe(beforeCodeRequests);
+
+    await preview.click();
+    await expect.poll(() => settings.evaluate("chrome.storage.local.get('comparisonPreferences').then(v => v.comparisonPreferences?.mode)")).toBe('split');
+    await expect(comparison.locator('iframe[title="After HTML preview for added.html"]').contentFrame().locator('#pref-head')).toHaveText('Added preview');
+    await page.goto(firstUrl, { waitUntil: 'domcontentloaded' });
+    await expect(preview).toHaveAttribute('aria-selected', 'true');
+    await expect(comparison.locator('iframe[title="After HTML preview for added.html"]').contentFrame().locator('#pref-head')).toHaveText('Added preview');
+  } finally {
+    headRelease.resolve();
     await context.close();
   }
 });

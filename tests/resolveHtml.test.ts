@@ -23,6 +23,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+
+// Deferred responses expose request starts without timing assertions or sleeps.
+function deferredRepositoryFetch() {
+  const requests = new Map<string, {
+    url: string;
+    resolve: (response: Response) => void;
+  }>();
+  const starts = new Map<string, ReturnType<typeof Promise.withResolvers<void>>>();
+  const started = (name: string) => {
+    let event = starts.get(name);
+    if (!event) {
+      event = Promise.withResolvers<void>();
+      starts.set(name, event);
+    }
+    return event;
+  };
+  globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const name = new URL(url).pathname.split('/').pop()!;
+    const { promise, resolve } = Promise.withResolvers<Response>();
+    requests.set(name, { url, resolve });
+    started(name).resolve();
+    return promise;
+  }) as typeof fetch;
+  return {
+    requests,
+    waitFor: (name: string) => started(name).promise,
+    respond: (name: string, body: string) => {
+      const request = requests.get(name)!;
+      const response = new Response(body, {
+        headers: { 'content-type': name.endsWith('.css') ? 'text/css' : 'application/javascript' },
+      });
+      Object.defineProperty(response, 'url', { value: request.url });
+      request.resolve(response);
+    },
+  };
+}
+
 describe('resolveRepositoryUrl', () => {
   it('models repository-root, relative, fragment, query, and external URLs', () => {
     expect(resolveRepositoryUrl('/assets/site.css', repoRef)).toMatchObject({
@@ -113,6 +151,123 @@ describe('srcset', () => {
     expect(output).toBe(
       'safe:data:image/png;base64,AAAA 1x, safe:image@2x.png 2x',
     );
+  });
+});
+
+describe('resource loading concurrency', () => {
+  it('starts public CSS and script entries together, preserving authored and module-map order', async () => {
+    const fetches = deferredRepositoryFetch();
+    const pending = resolveHtml(
+      `<link id="sheet" rel="stylesheet" href="site.css">
+       <script type="importmap">{"imports":{"authored":"ignored"}}</script>
+       <script id="first" src="first.js"></script>
+       <script id="inline">globalThis.inline = true;</script>
+       <script id="second" src="second.js" defer></script>
+       <script id="module-first" type="module" src="module-first.js"></script>
+       <script id="module-second" type="module" src="module-second.js"></script>`,
+      { target: 'sandbox', repoRef },
+    );
+    // No response is released until all independent entries have started.
+    await Promise.all(['site.css', 'first.js', 'second.js', 'module-first.js', 'module-second.js'].map(fetches.waitFor));
+    fetches.respond('module-second.js', 'import "./dependency.js"; globalThis.secondModule = true;');
+    await fetches.waitFor('dependency.js');
+    fetches.respond('dependency.js', 'export const value = 42;');
+    fetches.respond('second.js', 'globalThis.second = true;');
+    fetches.respond('module-first.js', 'import "./dependency.js"; globalThis.firstModule = true;');
+    fetches.respond('site.css', '.sheet { color: red; }');
+    fetches.respond('first.js', 'globalThis.first = true;');
+
+    const result = await pending;
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(Array.from(doc.querySelectorAll('script[id]'), (script) => script.id)).toEqual([
+      'first', 'inline', 'second', 'module-first', 'module-second',
+    ]);
+    expect(decodeDataUrl(doc.querySelector('#first')!.getAttribute('src')!)).toBe('globalThis.first = true;');
+    expect(decodeDataUrl(doc.querySelector('#second')!.getAttribute('src')!)).toBe('globalThis.second = true;');
+    expect(doc.querySelector('#second')!.hasAttribute('defer')).toBe(true);
+    expect(doc.querySelector('#inline')!.textContent).toBe('globalThis.inline = true;');
+    expect(decodeDataUrl(doc.querySelector('#sheet')!.getAttribute('href')!)).toContain('.sheet { color: red; }');
+    const maps = doc.querySelectorAll('script[type="importmap"]');
+    expect(maps).toHaveLength(1);
+    const imports = JSON.parse(maps[0]!.textContent!).imports;
+    const virtualRoot = 'https://private-preview.invalid/reports/weekly/';
+    expect(Object.keys(imports).slice(1)).toEqual([
+      virtualRoot + 'dependency.js', virtualRoot + 'module-first.js', virtualRoot + 'module-second.js',
+    ]);
+    expect(doc.querySelector('#module-first')!.getAttribute('src')).toBe(imports[virtualRoot + 'module-first.js']);
+    expect(doc.querySelector('#module-second')!.getAttribute('src')).toBe(imports[virtualRoot + 'module-second.js']);
+    expect(decodeDataUrl(imports[virtualRoot + 'module-first.js'])).toContain(virtualRoot + 'dependency.js');
+    expect(result.resources.fetched).toBe(6);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(6); // Shared module still deduplicates.
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('starts private embedded stylesheet imports together without changing cascade order', async () => {
+    vi.stubGlobal('location', new URL('https://github.com/acme/reports/blob/main/index.html'));
+    const fetches = deferredRepositoryFetch();
+    const pending = resolveHtml(
+      '<style id="first">@import "first.css";</style><style id="second">@import "second.css";</style>',
+      { target: 'sandbox-private', repoRef },
+    );
+    await Promise.all(['first.css', 'second.css'].map(fetches.waitFor));
+    fetches.respond('second.css', '.shared { color: blue; }');
+    fetches.respond('first.css', '.shared { color: red; }');
+    const result = await pending;
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(Array.from(doc.querySelectorAll('style'), (style) => [style.id, style.textContent])).toEqual([
+      ['first', '.shared { color: red; }'], ['second', '.shared { color: blue; }'],
+    ]);
+    expect(Array.from(fetches.requests.values(), ({ url }) => url)).toEqual([
+      `https://github.com/acme/reports/raw/${repoRef.ref}/reports/weekly/first.css`,
+      `https://github.com/acme/reports/raw/${repoRef.ref}/reports/weekly/second.css`,
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('enforces the total byte budget across concurrent completions', async () => {
+    const fetches = deferredRepositoryFetch();
+    const pending = resolveHtml(
+      '<script id="first" src="first.js"></script><script id="second" src="second.js"></script>',
+      { target: 'sandbox', repoRef, limits: { maxTotalBytes: 6 } },
+    );
+    await Promise.all(['first.js', 'second.js'].map(fetches.waitFor));
+    fetches.respond('second.js', '1234');
+    fetches.respond('first.js', 'abcd');
+    const result = await pending;
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(doc.querySelector('#first')).toBeNull();
+    expect(decodeDataUrl(doc.querySelector('#second')!.getAttribute('src')!)).toBe('1234');
+    expect(result.resources).toMatchObject({ fetched: 1, bytes: 4, failed: 1 });
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'resource-fetch-failed',
+        message: 'total resources exceed 6 byte limit',
+        url: 'first.js',
+      }),
+    ]);
+  });
+
+  it.each(['sandbox', 'sandbox-private'] as const)('respects the loader concurrency limit for %s scripts', async (target) => {
+    vi.stubGlobal('location', new URL('https://github.com/acme/reports/blob/main/index.html'));
+    const fetches = deferredRepositoryFetch();
+    const pending = resolveHtml(
+      '<script src="first.js"></script><script src="second.js"></script><script src="third.js"></script>',
+      { target, repoRef, limits: { concurrency: 2 } },
+    );
+    await Promise.all(['first.js', 'second.js'].map(fetches.waitFor));
+    expect(Array.from(fetches.requests.keys())).toEqual(['first.js', 'second.js']);
+    fetches.respond('second.js', 'globalThis.second = true;');
+    // A released slot starts the third script while the first is still pending.
+    await fetches.waitFor('third.js');
+    fetches.respond('third.js', 'globalThis.third = true;');
+    fetches.respond('first.js', 'globalThis.first = true;');
+    const result = await pending;
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(Array.from(doc.querySelectorAll('script[src]'), (script) => decodeDataUrl(script.getAttribute('src')!))).toEqual([
+      'globalThis.first = true;', 'globalThis.second = true;', 'globalThis.third = true;',
+    ]);
+    expect(result.resources.fetched).toBe(3);
+    expect(result.diagnostics).toEqual([]);
   });
 });
 
