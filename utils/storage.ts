@@ -14,11 +14,16 @@ export interface ComparisonPreferences {
 export const comparisonPreferencesStorage =
   storage.defineItem<ComparisonPreferences>('local:comparisonPreferences', {
     fallback: {
-      mode: 'source',
+      mode: 'split',
       viewport: 'responsive',
       syncScroll: true,
     },
   });
+
+export const blobViewModeStorage = storage.defineItem<'source' | 'preview'>(
+  'local:blobViewMode',
+  { fallback: 'preview' },
+);
 
 export async function purgeLegacyCredentials(): Promise<void> {
   await browser.storage.local.remove(['githubToken', 'local:githubToken']);

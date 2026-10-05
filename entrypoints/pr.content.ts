@@ -1502,7 +1502,8 @@ async function renderRichComparison(
         : !baseAvailable && !headAvailable
           ? 'Unavailable'
           : '';
-    state.status.style.display = state.status.textContent ? 'block' : 'none';
+    // Keep partial previews compact; Retry already signals resource issues.
+    state.status.style.display = !baseAvailable && !headAvailable ? 'block' : 'none';
     state.reloadButton.style.display =
       state.retryableFailures > 0 || (!baseAvailable && !headAvailable)
         ? 'inline-flex'
@@ -1515,8 +1516,8 @@ async function renderRichComparison(
     if (controller.signal.aborted) return;
     state.status.textContent =
       error instanceof Error
-        ? `Error: ${error.message}`
-        : 'Error: Comparison failed.';
+        ? `Comparison unavailable. ${error.message}`
+        : 'Comparison unavailable.';
     state.status.style.display = 'block';
     updateComparisonLayout(state);
     state.retryableFailures += 1;
