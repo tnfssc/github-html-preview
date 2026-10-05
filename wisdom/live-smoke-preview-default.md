@@ -24,3 +24,12 @@ Live GitHub can still change its DOM or experience outages; this fixes a stale s
 
 Worktree: `/home/tnfssc/.bruv/worktrees/t3code-7d9c2dbf-d4d936df1f38-task_bf77adec`.
 Values unchanged: existing trace-first guidance applies.
+
+## Parent integration
+
+- Cherry-picked the fix to `t3code/fix-failing-ci` as `09bc721`.
+- Parent passed typecheck, 98 unit tests, all 24 browser tests, and all 3 live smoke tests. The live smoke had no skips or retries.
+- PR: https://github.com/tnfssc/github-html-preview/pull/26 (base `develop`). The user asked for merge after checks pass.
+- Live workflow dispatched on the fix branch: run `37335383732`. Merge waits for GitHub CI, live smoke, and review of current PR state.
+- In this runtime, forcing the saved headless gh config returned a login prompt. The active inherited gh config worked. No credentials were read or changed.
+- Values unchanged: the existing trace-first value fits this test-only correction. No new product rule was found.
