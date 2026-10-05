@@ -2,20 +2,21 @@ import {
   extractBlobPageData,
   fetchRepositoryFile,
   parseBlobUrl,
-} from '@/utils/github';
-import { resolveHtml } from '@/utils/resolveHtml';
-import { renderExecutablePreview, type RenderResult } from '@/utils/renderer';
+} from '../utils/github';
+import { resolveHtml } from '../utils/resolveHtml';
+import { renderExecutablePreview, type RenderResult } from '../utils/renderer';
 import {
+  blobViewModeStorage,
   enabledStorage,
   purgeLegacyCredentials,
-} from '@/utils/storage';
-import type { BlobPageData } from '@/utils/github';
-import type { RepoRef, ResolveResult } from '@/utils/types';
-import { debugError, debugLog } from '@/utils/debug';
+} from '../utils/storage';
+import type { BlobPageData } from '../utils/github';
+import type { RepoRef, ResolveResult } from '../utils/types';
+import { debugError, debugLog } from '../utils/debug';
 import {
   removePreviewSnapshot,
   savePreviewSnapshot,
-} from '@/utils/previewSnapshot';
+} from '../utils/previewSnapshot';
 
 const PREVIEW_TAB_CLASS = 'gh-html-preview-tab';
 const PREVIEW_CONTAINER_CLASS = 'gh-html-preview-container';
@@ -29,7 +30,7 @@ interface RouteState {
   readonly sourceHtml: string | null;
   readonly metadataDiagnostic: string | null;
   readonly isPrivate: boolean;
-  readonly controller: AbortController;
+  controller: AbortController;
   readonly tab: HTMLElement;
   readonly tabButton: HTMLButtonElement;
   readonly tabBar: HTMLElement;
@@ -51,6 +52,9 @@ export default defineContentScript({
   runAt: 'document_end',
   main(ctx) {
     let enabled = true;
+    let viewMode: 'source' | 'preview' = 'preview';
+    let initialized = false;
+    let disposed = false;
     let generation = 0;
     let state: RouteState | null = null;
     let reconcileTimer: number | null = null;
@@ -83,9 +87,19 @@ export default defineContentScript({
       removeOrphanedUi();
     };
 
+    const rememberViewMode = (next: 'source' | 'preview') => {
+      viewMode = next;
+      void blobViewModeStorage.setValue(next);
+    };
+
     const showCode = () => {
       if (!state) return;
       state.active = false;
+      if (state.resolving && !state.render) {
+        state.controller.abort();
+        state.controller = new AbortController();
+        state.resolving = null;
+      }
       // Only deselect the Preview tab; GitHub's React state manages native
       // tab buttons and overrides aria-current/data-selected on re-render.
       state.tabButton.setAttribute('aria-current', 'false');
@@ -123,7 +137,10 @@ export default defineContentScript({
       const key = routeKey(repoRef);
       const controller = new AbortController();
       const previewId = `gh-html-preview-${routeGeneration}`;
-      const { tab, button } = createPreviewTab(tabBar, previewId, showPreview);
+      const { tab, button } = createPreviewTab(tabBar, previewId, () => {
+        rememberViewMode('preview');
+        showPreview();
+      });
       button.id = `${previewId}-tab`;
       tabBar.appendChild(tab);
 
@@ -204,7 +221,10 @@ export default defineContentScript({
         tabBar.querySelectorAll<HTMLButtonElement>('button'),
       )) {
         if (nativeButton === button) continue;
-        const listener = () => showCode();
+        const listener = () => {
+          rememberViewMode('source');
+          showCode();
+        };
         nativeButton.addEventListener('click', listener);
         nativeListenerCleanup.push(() =>
           nativeButton.removeEventListener('click', listener),
@@ -213,6 +233,7 @@ export default defineContentScript({
     };
 
     const reconcile = () => {
+      if (!initialized || disposed) return;
       if (!enabled) {
         teardown();
         return;
@@ -235,13 +256,12 @@ export default defineContentScript({
         privateRepo: pageData.isPrivate,
       });
 
-      const remainPreviewActive = state?.active ?? false;
       if (
         state &&
         (state.key !== key ||
           !state.container.isConnected ||
-         !state.tab.isConnected ||
-         !state.tabBar.isConnected ||
+          !state.tab.isConnected ||
+          !state.tabBar.isConnected ||
           (pageData.html !== null && pageData.html !== state.sourceHtml))
       ) {
         teardown();
@@ -249,7 +269,7 @@ export default defineContentScript({
 
       if (!state) {
         mount({ ...pageData, repoRef }, tabBar, blob);
-        if (remainPreviewActive) showPreview();
+        if (viewMode === 'preview') showPreview();
         return;
       }
 
@@ -264,7 +284,8 @@ export default defineContentScript({
     };
 
     const scheduleReconcile = () => {
-      if (reconcileTimer !== null) window.clearTimeout(reconcileTimer);
+      // Coalesce mutation bursts without postponing reconciliation indefinitely.
+      if (reconcileTimer !== null) return;
       reconcileTimer = window.setTimeout(() => {
         reconcileTimer = null;
         reconcile();
@@ -286,14 +307,16 @@ export default defineContentScript({
        (!state.container.isConnected ||
          !state.tab.isConnected ||
          !state.tabBar.isConnected);
-      const relevant = mutations.some((mutation) =>
-        Array.from(mutation.addedNodes).some(
-          (node) =>
+      const relevant = !disconnected && mutations.some((mutation) => {
+        for (const node of mutation.addedNodes) {
+          if (
             node instanceof Element &&
             (node.matches(RELEVANT_DOM_SELECTOR) ||
-              node.querySelector(RELEVANT_DOM_SELECTOR) !== null),
-        ),
-      );
+              node.querySelector(RELEVANT_DOM_SELECTOR) !== null)
+          ) return true;
+        }
+        return false;
+      });
       if (disconnected || relevant) scheduleReconcile();
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -311,13 +334,18 @@ export default defineContentScript({
     });
     void Promise.all([
       enabledStorage.getValue(),
+      blobViewModeStorage.getValue(),
       purgeLegacyCredentials(),
-    ]).then(([value]) => {
-        enabled = value;
-        reconcile();
-      });
+    ]).then(([value, preferredView]) => {
+      if (disposed) return;
+      enabled = value;
+      viewMode = preferredView;
+      initialized = true;
+      reconcile();
+    });
 
     ctx.onInvalidated(() => {
+      disposed = true;
       observer.disconnect();
       unwatchEnabled();
       teardown();
@@ -326,7 +354,9 @@ export default defineContentScript({
 });
 
 async function ensureResolved(route: RouteState): Promise<void> {
+  if (!route.active || route.controller.signal.aborted) return;
   if (route.render || route.resolving) return route.resolving ?? Promise.resolve();
+  const controller = route.controller;
   route.status.style.removeProperty('display');
   route.status.textContent = 'Loading';
   route.status.setAttribute('role', 'status');
@@ -343,24 +373,30 @@ async function ensureResolved(route: RouteState): Promise<void> {
       const sourceHtml =
         route.sourceHtml ??
         (
-          await fetchRepositoryFile(route.repoRef, route.controller.signal, {
+          await fetchRepositoryFile(route.repoRef, controller.signal, {
             privateRepo: route.isPrivate,
           })
         ).text;
+      controller.signal.throwIfAborted();
       const result = await resolveHtml(sourceHtml, {
         target: 'sandbox-private',
         repoRef: route.repoRef,
         privateRepo: route.isPrivate,
-        signal: route.controller.signal,
+        signal: controller.signal,
       });
-      route.controller.signal.throwIfAborted();
+      controller.signal.throwIfAborted();
       route.render = renderExecutablePreview(route.previewArea, result);
       try {
-        route.snapshotId = await savePreviewSnapshot(
+        const snapshotId = await savePreviewSnapshot(
           result,
           route.repoRef,
           route.isPrivate,
         );
+        if (controller.signal.aborted) {
+          void removePreviewSnapshot(snapshotId);
+          return;
+        }
+        route.snapshotId = snapshotId;
         route.fullLink.href = browser.runtime.getURL(
           `/preview.html?snapshot=${encodeURIComponent(route.snapshotId)}`,
         );
@@ -382,7 +418,7 @@ async function ensureResolved(route: RouteState): Promise<void> {
         bytes: result.resources.bytes,
       });
     } catch (error) {
-      if (route.controller.signal.aborted) return;
+      if (controller.signal.aborted) return;
       debugError('blob', 'resolve-failed', error, {
         path: route.repoRef.path,
         privateRepo: route.isPrivate,
@@ -402,7 +438,7 @@ async function ensureResolved(route: RouteState): Promise<void> {
         message('Preview could not be rendered. Source view remains available.'),
       );
     } finally {
-      route.resolving = null;
+      if (route.controller === controller) route.resolving = null;
     }
   })();
   return route.resolving;
