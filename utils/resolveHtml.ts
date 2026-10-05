@@ -303,33 +303,35 @@ async function resolveSandboxDocument(
   const stylesheetLinks = Array.from(
     doc.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"][href]'),
   );
-  await Promise.all(
-    stylesheetLinks.map(async (link) => {
-      const href = link.getAttribute('href');
-      if (!href) return;
-      const resolved = resolveRepositoryUrl(href, loader.repoRef, sourcePath);
-      if (resolved.kind !== 'repo' || !resolved.path) return;
-      try {
-        const resource = await loader.load(resolved.path, resolved.search);
-        const css = await inlineRepositoryCss(
-          new TextDecoder().decode(resource.bytes),
-          resolved.path,
-          1,
-          loader,
-        );
-        link.href = resourceDataUrl(
-          new TextEncoder().encode(css),
-          'text/css',
-        );
-        loader.stats.inlined += 1;
-      } catch (error) {
-        link.remove();
-        recordResourceFailure(loader, href, error);
-      }
-    }),
-  );
-
-  const moduleMap = await packageRepositoryScripts(doc, sourcePath, loader);
+  // Fetch stylesheets and script entries together; neither executes in this document.
+  const [, moduleMap] = await Promise.all([
+    Promise.all(
+      stylesheetLinks.map(async (link) => {
+        const href = link.getAttribute('href');
+        if (!href) return;
+        const resolved = resolveRepositoryUrl(href, loader.repoRef, sourcePath);
+        if (resolved.kind !== 'repo' || !resolved.path) return;
+        try {
+          const resource = await loader.load(resolved.path, resolved.search);
+          const css = await inlineRepositoryCss(
+            new TextDecoder().decode(resource.bytes),
+            resolved.path,
+            1,
+            loader,
+          );
+          link.href = resourceDataUrl(
+            new TextEncoder().encode(css),
+            'text/css',
+          );
+          loader.stats.inlined += 1;
+        } catch (error) {
+          link.remove();
+          recordResourceFailure(loader, href, error);
+        }
+      }),
+    ),
+    packageRepositoryScripts(doc, sourcePath, loader),
+  ]);
   importMap.textContent = JSON.stringify({
     imports: {
      [repoRoot]: repoRoot,
@@ -438,12 +440,16 @@ async function resolvePrivateSandboxDocument(
     }),
   );
 
-  for (const style of Array.from(doc.querySelectorAll('style'))) {
-    style.textContent = await inlineRepositoryCss(style.textContent ?? '',
-    sourcePath,
-    0,
-    loader,);
-  }
+  await Promise.all(
+    Array.from(doc.querySelectorAll('style')).map(async (style) => {
+      style.textContent = await inlineRepositoryCss(
+        style.textContent ?? '',
+        sourcePath,
+        0,
+        loader,
+      );
+    }),
+  );
   await Promise.all(
     Array.from(doc.querySelectorAll<HTMLElement>('[style]')).map(
       async (element) => {
@@ -548,30 +554,39 @@ async function packageRepositoryScripts(
   loader: ResourceLoader,
 ): Promise<Record<string, string>> {
   const moduleMap: Record<string, string> = {};
-  for (const script of Array.from(
-    doc.querySelectorAll<HTMLScriptElement>('script[src]'),
-  )) {
-    const src = script.getAttribute('src');
-    if (!src) continue;
-    const resolved = resolveRepositoryUrl(src, loader.repoRef, sourcePath);
-    if (resolved.kind !== 'repo' || !resolved.path) continue;
-    try {
-      if (script.type === 'module') {
-        const graph = await buildPrivateModuleGraph(resolved.path, loader);
-        Object.assign(moduleMap, graph.imports);
-        script.src = graph.entry;
-      } else {
-        const resource = await loader.load(resolved.path, resolved.search);
-        script.src = resourceDataUrl(
-          resource.bytes,
-          normalizedMime(resource.mime, resolved.path),
-        );
-      }
-      loader.stats.inlined += 1;
-    } catch (error) {
-      script.remove();
-      recordResourceFailure(loader, src, error);
-    }
+  // DOM nodes stay in authored order even when their fetches finish out of order.
+  // Each entry keeps its own module graph; merge maps in authored order as before.
+  const scriptMaps = await Promise.all(
+    Array.from(doc.querySelectorAll<HTMLScriptElement>('script[src]')).map(
+      async (script) => {
+        const src = script.getAttribute('src');
+        if (!src) return;
+        const resolved = resolveRepositoryUrl(src, loader.repoRef, sourcePath);
+        if (resolved.kind !== 'repo' || !resolved.path) return;
+        let imports: Record<string, string> | undefined;
+        try {
+          if (script.type === 'module') {
+            const graph = await buildPrivateModuleGraph(resolved.path, loader);
+            imports = graph.imports;
+            script.src = graph.entry;
+          } else {
+            const resource = await loader.load(resolved.path, resolved.search);
+            script.src = resourceDataUrl(
+              resource.bytes,
+              normalizedMime(resource.mime, resolved.path),
+            );
+          }
+          loader.stats.inlined += 1;
+        } catch (error) {
+          script.remove();
+          recordResourceFailure(loader, src, error);
+        }
+        return imports;
+      },
+    ),
+  );
+  for (const imports of scriptMaps) {
+    if (imports) Object.assign(moduleMap, imports);
   }
 
   for (const script of Array.from(
