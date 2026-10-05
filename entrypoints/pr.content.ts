@@ -3,22 +3,22 @@ import {
   parseBlobUrl,
   parseHtmlDiffUrl,
   type HtmlDiffRoute,
-} from '@/utils/github';
+} from '../utils/github';
 import {
   comparisonPreferencesStorage,
   enabledStorage,
   purgeLegacyCredentials,
   type ComparisonPreferences,
-} from '@/utils/storage';
-import { resolveHtml } from '@/utils/resolveHtml';
+} from '../utils/storage';
+import { resolveHtml } from '../utils/resolveHtml';
 import {
   renderExecutablePreview,
   type RenderResult,
   type ScrollPosition,
-} from '@/utils/renderer';
-import type { RepoRef } from '@/utils/types';
-import { debugError, debugLog } from '@/utils/debug';
-import { fetchWithRetry } from '@/utils/fetchWithRetry';
+} from '../utils/renderer';
+import type { RepoRef } from '../utils/types';
+import { debugError, debugLog } from '../utils/debug';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
 import {
   ANCHOR_ACTIVATE_MESSAGE,
   ANCHOR_FOCUS_MESSAGE,
@@ -28,12 +28,12 @@ import {
   ANCHORS_REQUEST_MESSAGE,
   encodeAnchorComment,
   type PreviewAnchor,
-} from '@/utils/annotations';
+} from '../utils/annotations';
 import {
   PullAnnotationSession,
   encodeComposeHash,
   injectConversationJumpButtons,
-} from '@/utils/prAnnotations';
+} from '../utils/prAnnotations';
 
 const PREVIEW_CONTROLS_CLASS = 'gh-html-preview-pr-controls';
 const RICH_CONTAINER_CLASS = 'gh-html-preview-pr-rich';
@@ -124,11 +124,13 @@ export default defineContentScript({
     debugLog('pr', 'content-script-start', {
       path: location.pathname,
     });
-    let enabled = true;
-    let preferences: ComparisonPreferences = {
-      mode: 'source',
-      viewport: 'responsive',
-      syncScroll: true,
+    let enabled: boolean | null = null;
+    let preferences: ComparisonPreferences | null = null;
+    let preferencesLoaded = false;
+    let invalidated = false;
+    const savePreferences = (next: ComparisonPreferences) => {
+      preferences = next;
+      void comparisonPreferencesStorage.setValue(next);
     };
     let state: DiffRouteState | null = null;
     let renderTimer: number | null = null;
@@ -163,6 +165,7 @@ export default defineContentScript({
     };
 
     const renderCards = (routeState: DiffRouteState) => {
+      if (!preferences) return;
       let targets = findDiffTargets();
       const nativePaths = new Set(
         targets
@@ -228,6 +231,7 @@ export default defineContentScript({
             : null,
           routeState,
           preferences,
+          savePreferences,
         );
       }
       if (
@@ -267,6 +271,7 @@ export default defineContentScript({
     };
 
     const reconcileRoute = () => {
+      if (!preferencesLoaded || invalidated) return;
       const route = enabled ? parseHtmlDiffUrl(location.href) : null;
       reconcileConversation();
       debugLog('pr', 'route-reconcile', {
@@ -371,19 +376,27 @@ export default defineContentScript({
       enabled = next;
       reconcileRoute();
     });
+    const unwatchPreferences = comparisonPreferencesStorage.watch((next) => {
+      preferences = next;
+    });
     void Promise.all([
       enabledStorage.getValue(),
       comparisonPreferencesStorage.getValue(),
       purgeLegacyCredentials(),
     ]).then(([storedEnabled, storedPreferences]) => {
-      enabled = storedEnabled;
-      preferences = storedPreferences;
+      if (invalidated) return;
+      // A watcher may have received a newer value while bootstrap was pending.
+      enabled ??= storedEnabled;
+      preferences ??= storedPreferences;
+      preferencesLoaded = true;
       reconcileRoute();
     });
 
     ctx.onInvalidated(() => {
+      invalidated = true;
       observer.disconnect();
       unwatchEnabled();
+      unwatchPreferences();
       window.clearInterval(refreshTimer);
       conversationCleanup?.();
       stopRoute();
@@ -666,6 +679,10 @@ function parseEmbeddedPullComparison(
 ): DiffComparison | null {
   if (!data) return null;
   const pullRequest = asRecord(data.pullRequest);
+  // SPA navigation can leave the previous PR's embedded payload in the DOM.
+  if (pullRequest?.number != null && String(pullRequest.number) !== String(route.pullNumber)) {
+    return null;
+  }
   const routeComparison = asRecord(data.comparison);
   const comparison =
     asRecord(pullRequest?.comparison) ??
@@ -1017,6 +1034,7 @@ function insertPreviewControls(
   initialHead: DiffSide | null,
   routeState: DiffRouteState,
   preferences: ComparisonPreferences,
+  savePreferences: (next: ComparisonPreferences) => void,
 ): void {
   debugLog('pr', 'controls-insert', {
     path: target.path,
@@ -1076,8 +1094,7 @@ function insertPreviewControls(
   const status = document.createElement('div');
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');
-  status.style.cssText =
-    'display:none;';
+  status.style.cssText = 'display:none;padding:16px;';
   status.textContent = 'Choose Preview';
   const toolbar = document.createElement('div');
   toolbar.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
@@ -1141,19 +1158,11 @@ function insertPreviewControls(
 
   const resizeObserver = new ResizeObserver(([entry]) => {
     if (!entry) return;
-    const bothVisible =
-      base.pane.style.display !== 'none' && head.pane.style.display !== 'none';
-    const stacked = entry.contentRect.width < 900 && bothVisible;
-    comparisonArea.style.gridTemplateColumns = stacked
-      ? 'minmax(0,1fr)'
-      : bothVisible
-        ? 'minmax(0,1fr) minmax(0,1fr)'
-        : 'minmax(0,1fr)';
-    comparisonArea.style.gridTemplateRows = stacked
-      ? 'minmax(500px,1fr) minmax(500px,1fr)'
-      : 'minmax(0,1fr)';
-    comparisonArea.style.overflowY = stacked ? 'auto' : 'hidden';
-    layoutStatus.textContent = stacked ? 'Stacked layout' : '';
+    updateComparisonLayout(richState, entry.contentRect.width);
+    layoutStatus.textContent =
+      richState.baseRender && richState.headRender && entry.contentRect.width < 900
+        ? 'Stacked layout'
+        : '';
   });
   resizeObserver.observe(container);
 
@@ -1222,30 +1231,13 @@ function insertPreviewControls(
   }
   routeState.richDiffs.add(richState);
 
-  if (!initialHead) {
-    void getDiffComparison(routeState)
-      .then((comparison) => {
-        if (!richState.container.isConnected) return;
-        richState.comparison = comparison;
-      })
-      .catch((error: unknown) => {
-        debugError('pr', 'metadata-background-failed', error, {
-          path: target.path,
-        });
-      });
-  }
-
   sourceButton.addEventListener('click', () => {
     showSourceDiff(richState);
-    void saveComparisonPreferences(richState);
+    saveComparisonPreferences(richState, savePreferences);
   });
   splitButton.addEventListener('click', () => {
-    void comparisonPreferencesStorage.setValue({
-      mode: 'split',
-      viewport: richState.viewportSelect.value as ComparisonPreferences['viewport'],
-      syncScroll: richState.syncInput.checked,
-    });
     showRenderedDiff(richState);
+    saveComparisonPreferences(richState, savePreferences);
     startRender(richState, routeState, false);
   });
   reloadButton.addEventListener('click', () => {
@@ -1256,10 +1248,10 @@ function insertPreviewControls(
   });
   viewportSelect.addEventListener('change', () => {
     applyViewportWidth(richState);
-    void saveComparisonPreferences(richState);
+    saveComparisonPreferences(richState, savePreferences);
   });
   syncInput.addEventListener('change', () => {
-    void saveComparisonPreferences(richState);
+    saveComparisonPreferences(richState, savePreferences);
   });
   const applyOverlay = () => {
     const active = overlayInput.checked && richState.mode === 'split';
@@ -1300,14 +1292,16 @@ function insertPreviewControls(
     });
   });
   if (preferences.mode === 'split' || preferences.mode === 'after') {
-    queueMicrotask(() => splitButton.click());
+    showRenderedDiff(richState);
+    startRender(richState, routeState, false);
   }
 }
 
-async function saveComparisonPreferences(
+function saveComparisonPreferences(
   state: RichDiffState,
-): Promise<void> {
-  await comparisonPreferencesStorage.setValue({
+  savePreferences: (next: ComparisonPreferences) => void,
+): void {
+  savePreferences({
     mode: state.mode,
     viewport:
       state.viewportSelect.value as ComparisonPreferences['viewport'],
@@ -1317,7 +1311,6 @@ async function saveComparisonPreferences(
 
 function showSourceDiff(state: RichDiffState): void {
   state.controller?.abort();
-  state.controller = null;
   state.mode = 'source';
   selectModeButton(state, state.sourceButton);
   state.container.style.display = 'none';
@@ -1329,16 +1322,32 @@ function showRenderedDiff(
 ): void {
   state.mode = 'split';
   selectModeButton(state, state.splitButton);
-  state.basePane.style.display = 'flex';
-  state.headPane.style.display = 'flex';
-  state.syncLabel.style.display = 'inline-flex';
-  state.overlayLabel.style.display = 'inline-flex';
-  state.comparisonArea.style.gridTemplateColumns =
-    state.container.clientWidth >= 900
-      ? 'minmax(0,1fr) minmax(0,1fr)'
-      : 'minmax(0,1fr)';
   hideCodeDiff(state);
   state.container.style.display = 'flex';
+  updateComparisonLayout(state);
+}
+
+// Empty panes are not preview content. Reveal only resolved sides, including
+// when reopening a cached added/deleted file or resizing during loading.
+function updateComparisonLayout(
+  state: RichDiffState,
+  width = state.container.clientWidth,
+): void {
+  const baseAvailable = state.baseRender !== null;
+  const headAvailable = state.headRender !== null;
+  const both = baseAvailable && headAvailable;
+  const stacked = both && width < 900;
+  state.basePane.style.display = baseAvailable ? 'flex' : 'none';
+  state.headPane.style.display = headAvailable ? 'flex' : 'none';
+  state.comparisonArea.style.display = baseAvailable || headAvailable ? 'grid' : 'none';
+  state.comparisonArea.style.gridTemplateColumns =
+    both && !stacked ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)';
+  state.comparisonArea.style.gridTemplateRows = stacked
+    ? 'minmax(500px,1fr) minmax(500px,1fr)'
+    : 'minmax(0,1fr)';
+  state.comparisonArea.style.overflowY = stacked ? 'auto' : 'hidden';
+  state.syncLabel.style.display = both ? 'inline-flex' : 'none';
+  state.overlayLabel.style.display = both ? 'inline-flex' : 'none';
 }
 
 function showCodeDiff(state: RichDiffState): void {
@@ -1388,10 +1397,17 @@ function startRender(
     routeState,
     force,
   ).finally(() => {
+    const restart =
+      state.controller?.signal.aborted &&
+      state.mode === 'split' &&
+      !routeState.controller.signal.aborted &&
+      state.container.isConnected;
+    state.controller = null;
     state.resolving = null;
     state.reloadButton.disabled = false;
     state.reloadButton.removeAttribute('aria-disabled');
     state.reloadButton.textContent = 'Retry';
+    if (restart) startRender(state, routeState, false);
   });
 }
 
@@ -1416,7 +1432,9 @@ async function renderRichComparison(
   state.controller = controller;
   const abort = () => controller.abort();
   routeState.controller.signal.addEventListener('abort', abort, { once: true });
+  updateComparisonLayout(state);
   state.status.textContent = 'Loading…';
+  state.status.style.display = 'block';
   debugLog('pr', 'rich-comparison-start', {
     path: state.target.path,
     mode: state.mode,
@@ -1439,8 +1457,14 @@ async function renderRichComparison(
     const head = comparison?.head ?? state.initialHead;
     if (!head) throw new Error('Diff head metadata is unavailable.');
 
+    const info = await getKnownDiffFileInfo(
+      routeState,
+      state.target.path,
+      comparison,
+    );
+    controller.signal.throwIfAborted();
     const jobs: Array<Promise<boolean>> = [];
-    if (state.mode === 'split' && !state.baseRender) {
+    if (state.mode === 'split' && !state.baseRender && info?.status !== 'added') {
       if (comparison) {
         jobs.push(
           renderComparisonSide(
@@ -1449,11 +1473,12 @@ async function renderRichComparison(
             comparison.base,
             routeState,
             controller.signal,
+            info,
           ),
         );
       }
     }
-    if (!state.headRender) {
+    if (!state.headRender && info?.status !== 'removed' && info?.status !== 'deleted') {
       jobs.push(
         renderComparisonSide(
           state,
@@ -1461,6 +1486,7 @@ async function renderRichComparison(
           head,
           routeState,
           controller.signal,
+          info,
         ),
       );
     }
@@ -1469,20 +1495,14 @@ async function renderRichComparison(
     applyViewportWidth(state);
     const baseAvailable = state.baseRender !== null;
     const headAvailable = state.headRender !== null;
-    state.basePane.style.display = baseAvailable ? 'flex' : 'none';
-    state.headPane.style.display = headAvailable ? 'flex' : 'none';
-    state.comparisonArea.style.gridTemplateColumns =
-      baseAvailable && headAvailable
-        ? state.container.clientWidth >= 900
-          ? 'minmax(0,1fr) minmax(0,1fr)'
-          : 'minmax(0,1fr)'
-        : 'minmax(0,1fr)';
+    updateComparisonLayout(state);
     state.status.textContent =
       state.retryableFailures > 0
         ? `${state.retryableFailures} resource issues`
         : !baseAvailable && !headAvailable
           ? 'Unavailable'
           : '';
+    state.status.style.display = state.status.textContent ? 'block' : 'none';
     state.reloadButton.style.display =
       state.retryableFailures > 0 || (!baseAvailable && !headAvailable)
         ? 'inline-flex'
@@ -1497,12 +1517,8 @@ async function renderRichComparison(
       error instanceof Error
         ? `Error: ${error.message}`
         : 'Error: Comparison failed.';
-    state.baseArea.replaceChildren(
-      createSideMessage('Comparison unavailable.', error),
-    );
-    state.basePane.style.display = 'flex';
-    state.headPane.style.display = 'none';
-    state.comparisonArea.style.gridTemplateColumns = 'minmax(0,1fr)';
+    state.status.style.display = 'block';
+    updateComparisonLayout(state);
     state.retryableFailures += 1;
     state.reloadButton.style.display = 'inline-flex';
     debugError('pr', 'rich-comparison-failed', error, {
@@ -1510,7 +1526,8 @@ async function renderRichComparison(
     });
   } finally {
     routeState.controller.signal.removeEventListener('abort', abort);
-    if (state.controller === controller) state.controller = null;
+    // startRender owns clearing the controller so a rapid Code → Preview
+    // toggle can restart an aborted load after its promise settles.
   }
 }
 
@@ -1520,10 +1537,14 @@ async function renderComparisonSide(
   side: DiffSide,
   routeState: DiffRouteState,
   signal: AbortSignal,
+  knownInfo: DiffFileInfo | null,
 ): Promise<boolean> {
   const area = sideName === 'base' ? state.baseArea : state.headArea;
   try {
-    let path = state.target.path;
+    let path =
+      sideName === 'base' && knownInfo?.status === 'renamed' && knownInfo.previousFilename
+        ? knownInfo.previousFilename
+        : state.target.path;
     let repoRef = sideRepoRef(side, path);
     let file;
     try {
@@ -1538,7 +1559,8 @@ async function renderComparisonSide(
       if (
         sideName === 'base' &&
         info?.status === 'renamed' &&
-        info.previousFilename
+        info.previousFilename &&
+        info.previousFilename !== path
       ) {
         path = info.previousFilename;
         repoRef = sideRepoRef(side, path);
@@ -1549,7 +1571,7 @@ async function renderComparisonSide(
         throw new ExpectedMissingSideError(
           'File was added in this diff; no Before version exists.',
         );
-      } else if (sideName === 'head' && info?.status === 'removed') {
+      } else if (sideName === 'head' && (info?.status === 'removed' || info?.status === 'deleted')) {
         throw new ExpectedMissingSideError(
           'File was deleted in this diff; no After version exists.',
         );
@@ -1804,6 +1826,31 @@ async function getDiffComparison(
     throw error;
   });
   return routeState.metadata;
+}
+
+// Reuse metadata already on the page/in flight; don't add a files API request
+// to the critical path of every otherwise healthy modified-file preview.
+async function getKnownDiffFileInfo(
+  routeState: DiffRouteState,
+  path: string,
+  comparison: DiffComparison | null,
+): Promise<DiffFileInfo | null> {
+  let files: DiffFileInfo[] = [];
+  if (routeState.fileMetadata) {
+    files = await routeState.fileMetadata.catch(() => []);
+  } else if (routeState.route.kind === 'pull' && comparison) {
+    const data = readEmbeddedPullChangesRoute();
+    const embedded = parseEmbeddedPullComparison(routeState.route, data);
+    if (
+      embedded?.base.sha === comparison.base.sha &&
+      embedded.head.sha === comparison.head.sha
+    ) {
+      files = parseEmbeddedPullFiles(data);
+    }
+  }
+  return (
+    files.find((file) => file.filename === path || file.previousFilename === path) ?? null
+  );
 }
 
 async function getDiffFileInfo(
