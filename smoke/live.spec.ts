@@ -114,14 +114,29 @@ test('current GitHub PR UI renders lightweight executable HTML diffs', async () 
       name: 'Display before and after previews',
     });
     await expect(richButton).toHaveCount(1, { timeout: liveTimeout });
-    await expect(
-      htmlDiff.getByRole('tab', { name: 'Display code diff' }),
-    ).toHaveCount(1, { timeout: liveTimeout });
+    const sourceButton = htmlDiff.getByRole('tab', {
+      name: 'Display code diff',
+    });
+    await expect(sourceButton).toHaveCount(1, { timeout: liveTimeout });
+    const richContainer = htmlDiff.locator('.gh-html-preview-pr-rich');
+
+    // Fresh profiles default to Preview; Code visibility requires an explicit choice.
+    await expect(richButton).toHaveAttribute('aria-selected', 'true', {
+      timeout: liveTimeout,
+    });
+    await expect(richContainer).toBeVisible({ timeout: liveTimeout });
+    await expect(htmlDiff.locator('.js-file-content')).toBeHidden({
+      timeout: liveTimeout,
+    });
+    await sourceButton.click();
+    await expect(sourceButton).toHaveAttribute('aria-selected', 'true');
     await expect(htmlDiff.locator('.js-file-content')).toBeVisible({
       timeout: liveTimeout,
     });
+    await expect(richContainer).toBeHidden({ timeout: liveTimeout });
+
     await richButton.click();
-    const richContainer = htmlDiff.locator('.gh-html-preview-pr-rich');
+    await expect(richButton).toHaveAttribute('aria-selected', 'true');
     await expect(richContainer.getByRole('status')).toBeHidden({
       timeout: liveTimeout,
     });
@@ -185,10 +200,8 @@ test('current GitHub PR UI renders lightweight executable HTML diffs', async () 
       })
       .toBeGreaterThan(300);
 
-
-    await htmlDiff
-      .getByRole('tab', { name: 'Display code diff' })
-      .click();
+    await sourceButton.click();
+    await expect(sourceButton).toHaveAttribute('aria-selected', 'true');
     await expect(htmlDiff.locator('.js-file-content')).toBeVisible({
       timeout: liveTimeout,
     });
