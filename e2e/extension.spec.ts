@@ -2149,6 +2149,11 @@ test('Retry freshens only its blob source and transitive graph', async () => {
     const selected = page.locator('.gh-html-preview-container');
     await selected.getByText('View resource issues', { exact: true }).click();
     await expect(selected.getByRole('button', { name: 'Retry' })).toBeVisible();
+    const initialFrame = selected.locator('iframe[title="Executable HTML preview"]').contentFrame();
+    await expect(initialFrame.locator('#modern-loaded')).toHaveText('loaded');
+    await expect(initialFrame.locator('#legacy-loaded')).toHaveText('loaded');
+    const cachedModernPixels = await initialFrame.locator('#modern-image').screenshot();
+    const cachedLegacyPixels = await initialFrame.locator('#legacy-image').screenshot();
     await unrelated.goto(otherUrl);
     const other = unrelated.locator('.gh-html-preview-container');
     await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#module')).toHaveText('cached');
@@ -2185,6 +2190,10 @@ test('Retry freshens only its blob source and transitive graph', async () => {
     expect(svgState.legacy).toBe(svgState.modern);
     expect(Buffer.from(svgState.modern!.split(',')[1], 'base64').toString()).toContain('fill="lime"');
     expect(svgState.localWidth).toBe(12);
+    // Same element bounds, red before Retry and lime after: prove the fresh
+    // SVG bytes were painted, not merely loaded or embedded in the document.
+    expect(await frame.locator('#modern-image').screenshot()).not.toEqual(cachedModernPixels);
+    expect(await frame.locator('#legacy-image').screenshot()).not.toEqual(cachedLegacyPixels);
     await expect(selected.getByRole('button', { name: 'Retry' })).toHaveCount(0);
     const observed = await cdp.send('Runtime.evaluate', { contextId: extensionWorld,
       expression: 'retryRequests', returnByValue: true });

@@ -44,3 +44,11 @@ The normal public resolver rewrites some assets to browser-loaded CDN URLs. A Re
 - `corepack pnpm test:e2e --grep "Retry freshens|Retry diagnoses"`: extension build and **2 Chromium tests passed**. The selected-document graph now includes a valid SVG diagram, checks actual image load events for href/xlink:href, fresh SVG bytes, local-use geometry, one reload fetch for the shared SVG, and untouched unrelated work. The external-use regression checks the displayed author guidance, omitted repository references, unchanged authored external/data URLs, and actual zero-vs-nonzero browser geometry. Routed requests remain policy/rendering evidence, not real disk-cache eviction proof.
 - Final full validation: `corepack pnpm test` (extension build, **108 unit tests passed**), `corepack pnpm test:e2e` (extension build, **26 Chromium tests passed**), `corepack pnpm exec tsc --noEmit`, and `git diff --check` all exited zero. The existing es-module-lexer asm.js warning remains nonfatal.
 - Review-fix base: `d6f231c` (parent's integrated scoped Retry commit). Branch: `fix/scoped-html-retry-svg`. Worktree: `/home/tnfssc/.bruv/worktrees/t3-7864b6d9-d4d936df1f38-task_36737353`. Package remains **0.6.7**; parent owns integration. No push, PR, merge, or release.
+
+## Parent integration proof
+
+Parent integrated both worker commits and repeated type-check, all 108 unit tests, 26 extension E2E tests, and 3 live GitHub smoke tests successfully. Stable and debug 0.6.7 ZIPs built, their package/manifest versions match, and both exact archives passed the blob-preview installation smoke. The SVG browser test checks load events, fresh decoded SVG bytes, and changed screenshots of both modern/legacy SVG image elements. The final two focused Retry tests passed with these rendered-pixel comparisons. They compare before/after in the same run; no platform-specific golden images or new image dependency is needed.
+
+The current environment's normal /home/tnfssc/.local/bin/gh wrapper works. Forcing the older headless config path from github-cli.md reported no login here. Do not print credentials while troubleshooting this difference.
+
+Remaining release steps belong to the parent: final review, PR/CI, merge, then push v0.6.7 at the merged commit. No repository edits after shipping. Release facts go on the PR/release.

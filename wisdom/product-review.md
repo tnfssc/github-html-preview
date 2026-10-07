@@ -12,10 +12,12 @@ The user asked to improve Retry. Refresh only the selected HTML document and res
 
 Open a PR, merge it after checks, then publish a release. Planned stable version: 0.6.7.
 
-## Work in progress
+## Implementation and validation
 
-Implementation is delegated to task_1e568cb6 on branch fix/scoped-html-retry in its own worktree. Read wisdom/scoped-html-retry.md from that result for its actual path, design, tests, and limits. Parent branch is t3/product-improvements in /home/tnfssc/.t3/worktrees/gh-html-iframe/t3-7864b6d9.
+The scoped Retry change and SVG review fix are integrated on t3/product-improvements in /home/tnfssc/.t3/worktrees/gh-html-iframe/t3-7864b6d9. Worker paths, commits, design, and limits are in [scoped HTML Retry](scoped-html-retry.md).
 
-No release has happened yet. The tag must point at the merged commit. The tag workflow builds and tests the exact archive before publishing it.
+Parent validation passed after the SVG fix: type-check, 108 unit tests, 26 extension E2E tests, and 3 live GitHub smoke tests. Stable and debug ZIPs built. Both exact ZIPs passed the blob-preview installation smoke. Version checks passed for package and both manifests at 0.6.7. No new permissions or controls were added.
 
-Values now say to put user experience first. This comes directly from the user, not a guessed engineering lesson.
+Next: final review, push the PR, wait for CI, merge, then tag the merged commit as v0.6.7. The tag workflow publishes the tested stable archive. No release has happened yet. Record later merge/release facts on the PR and release, not by editing this shipped worktree.
+
+Values say to put user experience first. No extra value was added for the cache implementation; its details belong with the feature.
