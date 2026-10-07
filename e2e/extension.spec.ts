@@ -2096,3 +2096,152 @@ function delay(milliseconds: number): Promise<void> {
   setTimeout(resolve, milliseconds);
   return promise;
 }
+
+
+test('Retry freshens only its blob source and transitive graph', async () => {
+  const { context, page, extensionId } = await launchWithExtension();
+  const unrelated = await context.newPage();
+  const selectedUrl = 'https://github.com/acme/reports/blob/main/selected/index.html';
+  const otherUrl = 'https://github.com/acme/reports/blob/main/other/index.html';
+  const requests: string[] = [];
+  let retrying = false;
+  const html = (version: string) => '<h1 id="version">' + version + '</h1>' +
+    '<style>@import "./theme.css";</style><img id="chart" src="./chart.png">' +
+    '<img src="./recover.png"><output id="module">waiting</output>' +
+    '<output id="modern-loaded"></output><output id="legacy-loaded"></output>' +
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="32">' +
+    '<defs><rect id="local-box" width="12" height="12"/></defs><use id="local-use" href="#local-box"/>' +
+    '<image id="modern-image" href="./diagram.svg" width="24" height="24" onload="document.querySelector(\'#modern-loaded\').textContent=\'loaded\'"/>' +
+    '<image id="legacy-image" xlink:href="./diagram.svg" x="32" width="24" height="24" onload="document.querySelector(\'#legacy-loaded\').textContent=\'loaded\'"/></svg>' +
+    '<script type="module" src="./main.js"></script>';
+  try {
+    // Routing disables Chromium's HTTP cache. The unit regression proves
+    // cache-mode behavior; this checks fresh graph rendering and request scope.
+    await context.route('**/*', async route => {
+      const url = route.request().url();
+      if (url === selectedUrl || url === otherUrl) {
+        const path = url === selectedUrl ? 'selected/index.html' : 'other/index.html';
+        await route.fulfill({ status: 200, contentType: 'text/html', body: githubBlobFixture(html('cached'), commit, path) });
+        return;
+      }
+      if (url.startsWith(rawBase + '/')) {
+        const path = url.slice(rawBase.length + 1);
+        requests.push(path);
+        const reload = retrying && path.startsWith('selected/');
+        const name = path.split('/').pop();
+        const version = reload ? 'fresh' : 'cached';
+        if (path === 'selected/recover.png' && !reload) {
+          await route.fulfill({ status: 400, body: 'resource unavailable' }); return;
+        }
+        const body = name === 'index.html' ? html(version) :
+          name === 'diagram.svg' ? '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="' + (reload ? 'lime' : 'red') + '"/></svg>' :
+          name === 'theme.css' ? '@import "./nested.css"; @font-face { font-family: report; src: url("./font.woff2") }' :
+          name === 'nested.css' ? 'h1 { color: ' + (reload ? 'rgb(4, 5, 6)' : 'rgb(1, 2, 3)') + '; background: url("./background.png") }' :
+          name === 'main.js' ? 'import { value } from "./child.js"; import("./lazy.js").then(() => document.querySelector("#module").textContent = value);' :
+          name === 'child.js' || name === 'lazy.js' ? 'export const value = "' + version + '";' : version;
+        await route.fulfill({ status: 200, contentType: name?.endsWith('.css') ? 'text/css' : name?.endsWith('.js') ? 'application/javascript' : name?.endsWith('.html') ? 'text/html' : 'application/octet-stream', headers: { 'cache-control': 'public, max-age=3600' }, body });
+        return;
+      }
+      if (url.startsWith('chrome-extension:')) { await route.continue(); return; }
+      await route.abort();
+    });
+    await page.goto(selectedUrl);
+    const selected = page.locator('.gh-html-preview-container');
+    await selected.getByText('View resource issues', { exact: true }).click();
+    await expect(selected.getByRole('button', { name: 'Retry' })).toBeVisible();
+    const initialFrame = selected.locator('iframe[title="Executable HTML preview"]').contentFrame();
+    await expect(initialFrame.locator('#modern-loaded')).toHaveText('loaded');
+    await expect(initialFrame.locator('#legacy-loaded')).toHaveText('loaded');
+    const cachedModernPixels = await initialFrame.locator('#modern-image').screenshot();
+    const cachedLegacyPixels = await initialFrame.locator('#legacy-image').screenshot();
+    await unrelated.goto(otherUrl);
+    const other = unrelated.locator('.gh-html-preview-container');
+    await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#module')).toHaveText('cached');
+    // Observe RequestInit in the extension isolated world without changing it.
+    // Interception occurs before Chromium adds HTTP cache directives.
+    const cdp = await context.newCDPSession(page);
+    const worlds: number[] = [];
+    cdp.on('Runtime.executionContextCreated', event => worlds.push(event.context.id));
+    await cdp.send('Runtime.enable');
+    let extensionWorld: number | undefined;
+    for (const contextId of worlds) {
+      const identity = await cdp.send('Runtime.evaluate', { contextId,
+        expression: 'globalThis.chrome?.runtime?.id', returnByValue: true });
+      if (identity.result.value === extensionId) extensionWorld = contextId;
+    }
+    expect(extensionWorld).toBeDefined();
+    await cdp.send('Runtime.evaluate', { contextId: extensionWorld, expression:       'globalThis.retryRequests = []; const originalFetch = globalThis.fetch; globalThis.fetch = function(input, init) { retryRequests.push({ url: String(input), cache: init?.cache }); return originalFetch.call(this, input, init); }' });
+    const start = requests.length;
+    retrying = true;
+    await selected.getByRole('button', { name: 'Retry' }).click();
+    const frame = selected.locator('iframe[title="Executable HTML preview"]').contentFrame();
+    await expect(frame.locator('#version')).toHaveText('fresh');
+    await expect(frame.locator('#module')).toHaveText('fresh');
+    await expect(frame.locator('h1')).toHaveCSS('color', 'rgb(4, 5, 6)');
+    await expect(frame.locator('#chart')).toHaveAttribute('src', 'data:image/png;base64,' + Buffer.from('fresh').toString('base64'));
+    await expect(frame.locator('#modern-loaded')).toHaveText('loaded');
+    await expect(frame.locator('#legacy-loaded')).toHaveText('loaded');
+    await expect(frame.locator('#modern-image')).toHaveAttribute('href', /^data:image\/svg\+xml;base64,/);
+    const svgState = await frame.locator('svg').evaluate(element => ({
+      modern: element.querySelector('#modern-image')!.getAttribute('href'),
+      legacy: element.querySelector('#legacy-image')!.getAttributeNS('http://www.w3.org/1999/xlink', 'href'),
+      localWidth: (element.querySelector('#local-use') as SVGGraphicsElement).getBBox().width,
+    }));
+    expect(svgState.legacy).toBe(svgState.modern);
+    expect(Buffer.from(svgState.modern!.split(',')[1], 'base64').toString()).toContain('fill="lime"');
+    expect(svgState.localWidth).toBe(12);
+    // Same element bounds, red before Retry and lime after: prove the fresh
+    // SVG bytes were painted, not merely loaded or embedded in the document.
+    expect(await frame.locator('#modern-image').screenshot()).not.toEqual(cachedModernPixels);
+    expect(await frame.locator('#legacy-image').screenshot()).not.toEqual(cachedLegacyPixels);
+    await expect(selected.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+    const observed = await cdp.send('Runtime.evaluate', { contextId: extensionWorld,
+      expression: 'retryRequests', returnByValue: true });
+    expect(observed.result.value).toHaveLength(11);
+    expect(observed.result.value.every((request: { url: string; cache: string }) =>
+      request.cache === 'reload' && request.url.startsWith(rawBase + '/selected/'))).toBe(true);
+    expect(requests.slice(start).every(path => path.startsWith('selected/'))).toBe(true);
+    expect(requests.slice(start).sort()).toEqual([
+      'index.html', 'theme.css', 'nested.css', 'font.woff2', 'background.png', 'chart.png', 'recover.png', 'diagram.svg', 'main.js', 'child.js', 'lazy.js',
+    ].map(name => 'selected/' + name).sort());
+    await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#version')).toHaveText('cached');
+    const normalStart = requests.length;
+    await unrelated.reload();
+    await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#module')).toHaveText('cached');
+    expect(requests.slice(normalStart).every(path => path.startsWith('other/'))).toBe(true);
+  } finally {
+    await context.close();
+  }
+});
+
+
+test('Retry diagnoses repository external SVG use instead of emitting non-rendering data URLs', async () => {
+  const { context, page } = await launchWithExtension();
+  const sprite = '<svg xmlns="http://www.w3.org/2000/svg"><rect id="box" width="24" height="24"/></svg>';
+  const dataUse = 'data:image/svg+xml;base64,' + Buffer.from(sprite).toString('base64') + '#box';
+  const html = '<img src="./missing.png"><svg xmlns:xlink="http://www.w3.org/1999/xlink">' +
+    '<defs><rect id="box" width="24" height="24"/></defs>' +
+    '<use id="local" href="#box"/><use id="legacy-local" xlink:href="#box"/>' +
+    '<use id="repo" href="./symbols.svg#box"/>' +
+    '<use id="repo-legacy" xlink:href="./symbols.svg#box"/>' +
+    '<use id="data-use" href="' + dataUse + '"/>' +
+    '<use id="external" href="https://external.example/symbols.svg#box"/></svg>';
+  try {
+    const requested = await routeProductFixtures(context, html);
+    await page.goto(blobUrl);
+    const container = page.locator('.gh-html-preview-container');
+    await container.getByText('View resource issues', { exact: true }).click();
+    await container.getByRole('button', { name: 'Retry' }).click();
+    await expect(container.getByText(/Embed the SVG symbols in this HTML/)).toHaveCount(2);
+    const frame = container.locator('iframe[title="Executable HTML preview"]').contentFrame();
+    await expect(frame.locator('#repo')).not.toHaveAttribute('href');
+    await expect(frame.locator('#repo-legacy')).not.toHaveAttribute('xlink:href');
+    await expect(frame.locator('#data-use')).toHaveAttribute('href', dataUse);
+    await expect(frame.locator('#external')).toHaveAttribute('href', 'https://external.example/symbols.svg#box');
+    const widths = await frame.locator('svg').evaluate(svg => Array.from(svg.querySelectorAll('use')).map(use => [use.id, use.getBBox().width]));
+    expect(Object.fromEntries(widths)).toEqual({ local: 24, 'legacy-local': 24, repo: 0, 'repo-legacy': 0, 'data-use': 0, external: 0 });
+    expect(requested).not.toContain(rawBase + '/reports/weekly/symbols.svg');
+  } finally {
+    await context.close();
+  }
+});

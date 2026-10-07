@@ -6,6 +6,7 @@ import {
   resolveRepositoryUrl,
   transformSrcset,
 } from '../utils/resolveHtml';
+import { fetchRepositoryFile } from '../utils/github';
 import type { RepoRef } from '../utils/types';
 
 const repoRef: RepoRef = {
@@ -621,3 +622,161 @@ function decodeDataUrl(url: string): string {
   const encoded = url.split(',')[1] ?? '';
   return atob(encoded);
 }
+
+
+describe('scoped document Retry', () => {
+  it('reloads only the selected source and its packaged public graph; normal documents keep caching', async () => {
+    const selected = { ...repoRef, path: 'selected/index.html' };
+    const other = { ...repoRef, path: 'other/index.html' };
+    let version = 'old';
+    const cache = new Map<string, string>();
+    const requests: Array<{ path: string; init?: RequestInit }> = [];
+    const html = (value: string) => '<h1>' + value + '</h1>' +
+      '<style>@import "./theme.css";</style><img src="./chart.png">' +
+      '<script type="module" src="./main.js"></script>' +
+      '<img src="https://external.example/image.png">';
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = new URL(url).pathname.split('/').slice(4).join('/');
+      requests.push({ path, init });
+      const name = path.split('/').pop();
+      const fresh = name === 'index.html' ? html(version) :
+        name === 'theme.css' ? '@import "./nested.css"; @font-face { font-family: report; src: url("./font.woff2") }' :
+        name === 'nested.css' ? 'h1 { --version: ' + version + '; background: url("./background.png") }' :
+        name === 'main.js' ? 'import { value } from "./child.js"; import("./lazy.js");' :
+        name === 'child.js' || name === 'lazy.js' ? 'export const value = "' + version + '";' : version;
+      if (!cache.has(url) || init?.cache === 'reload') cache.set(url, fresh);
+      return new Response(cache.get(url), { headers: { 'content-type': name?.endsWith('.css') ? 'text/css' : 'application/octet-stream' } });
+    }) as typeof fetch;
+    // Prime both documents' repository assets using the packaging path.
+    for (const ref of [selected, other]) {
+      const source = await fetchRepositoryFile(ref, new AbortController().signal);
+      await resolveHtml(source.text, { target: 'sandbox-private', privateRepo: false, repoRef: ref });
+    }
+    version = 'fresh';
+    const start = requests.length;
+    const source = await fetchRepositoryFile(selected, new AbortController().signal, { refresh: true });
+    const refreshed = await resolveHtml(source.text, { target: 'sandbox', repoRef: selected, refresh: true });
+    const freshDoc = new DOMParser().parseFromString(refreshed.html, 'text/html');
+    expect(freshDoc.querySelector('h1')?.textContent).toBe('fresh');
+    expect(freshDoc.querySelector('style')?.textContent).toContain('--version: fresh');
+    expect(freshDoc.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,' + btoa('fresh'));
+    const imports = JSON.parse(freshDoc.querySelector('script[type="importmap"]')!.textContent!).imports;
+    expect(atob(imports['https://private-preview.invalid/selected/child.js'].split(',')[1])).toContain('fresh');
+    expect(atob(imports['https://private-preview.invalid/selected/lazy.js'].split(',')[1])).toContain('fresh');
+    expect(atob(imports['https://private-preview.invalid/selected/main.js'].split(',')[1])).toContain('import("https://private-preview.invalid/selected/lazy.js")');
+    expect(refreshed.diagnostics).toEqual([]);
+    const retryRequests = requests.slice(start);
+    expect(retryRequests.map(r => r.path).sort()).toEqual([
+      'index.html', 'theme.css', 'nested.css', 'font.woff2', 'background.png', 'chart.png', 'main.js', 'child.js', 'lazy.js',
+    ].map(name => 'selected/' + name).sort());
+    expect(retryRequests.every(r => r.init?.cache === 'reload' && r.init.credentials === 'omit')).toBe(true);
+    const normalStart = requests.length;
+    const normalSource = await fetchRepositoryFile(other, new AbortController().signal);
+    const normal = await resolveHtml(normalSource.text, { target: 'sandbox', repoRef: other });
+    expect(normal.html).toContain('<h1>old</h1>');
+    expect(normal.html).toContain('cdn.jsdelivr.net/gh/acme/reports@' + repoRef.ref + '/other/chart.png');
+    expect(requests.slice(normalStart).every(r => r.path.startsWith('other/') && r.init?.cache === undefined)).toBe(true);
+  });
+});
+
+
+describe('packaged SVG repository references', () => {
+  const xlink = 'http://www.w3.org/1999/xlink';
+  const svg = 'http://www.w3.org/2000/svg';
+
+  it('keeps normal public SVG images browser-loaded without a refresh fetch', async () => {
+    globalThis.fetch = vi.fn() as typeof fetch;
+    const result = await resolveHtml('<svg xmlns:xlink="' + xlink + '">' +
+      '<image id="modern" href="./diagram.svg#view"/>' +
+      '<image id="legacy" xlink:href="./diagram.svg#view"/></svg>', {
+      repoRef, target: 'sandbox',
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    const expected = 'https://cdn.jsdelivr.net/gh/acme/reports@' + repoRef.ref + '/reports/weekly/diagram.svg#view';
+    expect(doc.querySelector('#modern')!.getAttribute('href')).toBe(expected);
+    expect(doc.querySelector('#legacy')!.getAttributeNS(xlink, 'href')).toBe(expected);
+  });
+
+  it.each([false, true])('reloads and deduplicates SVG images with private transport=%s', async (privateRepo) => {
+    vi.stubGlobal('location', new URL('https://github.com/acme/reports/blob/main/index.html'));
+    let version = 'cached';
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push({ url, init });
+      const response = new Response('<svg xmlns="' + svg + '"><text>' + version + '</text></svg>', {
+        headers: { 'content-type': 'image/svg+xml' },
+      });
+      Object.defineProperty(response, 'url', { value: url });
+      return response;
+    }) as typeof fetch;
+    const html = '<svg xmlns="' + svg + '" xmlns:xlink="' + xlink + '">' +
+      '<image id="modern" href="./diagram.svg#view"/>' +
+      '<image id="legacy" xlink:href="./diagram.svg#other-view"/>' +
+      '<image id="both" href="./diagram.svg" xlink:href="./diagram.svg"/>' +
+      '<image id="local" href="#local-image"/>' +
+      '<image id="external" xlink:href="https://external.example/diagram.svg#view"/></svg>';
+    const options = { target: 'sandbox-private' as const, privateRepo, repoRef };
+    await resolveHtml(html, options);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].init?.cache).toBeUndefined();
+    version = 'fresh';
+    const result = await resolveHtml(html, { ...options, target: privateRepo ? 'sandbox-private' : 'sandbox', refresh: true });
+    expect(requests).toHaveLength(2);
+    const retry = requests[1];
+    expect(retry.init?.cache).toBe('reload');
+    expect(retry.init?.credentials).toBe(privateRepo ? 'same-origin' : 'omit');
+    expect(retry.url).toBe((privateRepo ? 'https://github.com/acme/reports/raw/' : 'https://raw.githubusercontent.com/acme/reports/') + repoRef.ref + '/reports/weekly/diagram.svg');
+    expect(result.resources.fetched).toBe(1);
+    expect(result.diagnostics).toEqual([]);
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    const modern = doc.querySelector('#modern')!;
+    const legacy = doc.querySelector('#legacy')!;
+    expect(modern.namespaceURI).toBe(svg);
+    expect(modern.getAttribute('href')).toMatch(/^data:image\/svg\+xml;base64,.*#view$/);
+    expect(atob(modern.getAttribute('href')!.split(',')[1].split('#')[0])).toContain('fresh');
+    expect(legacy.getAttributeNodeNS(xlink, 'href')?.name).toBe('xlink:href');
+    expect(legacy.getAttributeNS(xlink, 'href')).toMatch(/^data:image\/svg\+xml;base64,.*#other-view$/);
+    expect(doc.querySelector('#both')!.getAttribute('href')).toBe(doc.querySelector('#both')!.getAttributeNS(xlink, 'href'));
+    expect(doc.querySelector('#local')!.getAttribute('href')).toBe('#local-image');
+    expect(doc.querySelector('#external')!.getAttributeNS(xlink, 'href')).toBe('https://external.example/diagram.svg#view');
+    expect(doc.querySelector('svg')!.getAttribute('xmlns:xlink')).toBe(xlink);
+  });
+
+  it.each([false, true])('diagnoses repository external use without fetching or leaking it (private=%s)', async (privateRepo) => {
+    globalThis.fetch = vi.fn() as typeof fetch;
+    const result = await resolveHtml('<svg xmlns:xlink="' + xlink + '">' +
+      '<defs><rect id="box" width="24" height="24"/></defs>' +
+      '<use id="local" href="#box"/><use id="legacy-local" xlink:href="#box"/>' +
+      '<use id="repo" href="./symbols.svg#box"/>' +
+      '<use id="repo-legacy" xlink:href="/assets/symbols.svg#box"/>' +
+      '<use id="external" href="https://external.example/symbols.svg#box"/></svg>', {
+      repoRef, target: privateRepo ? 'sandbox-private' : 'sandbox', privateRepo, refresh: true,
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(result.resources.skipped).toBe(2);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({ code: 'svg-use-not-packaged', url: './symbols.svg#box', message: expect.stringContaining('Embed the SVG symbols') }),
+      expect.objectContaining({ code: 'svg-use-not-packaged', url: '/assets/symbols.svg#box' }),
+    ]);
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(doc.querySelector('#local')!.getAttribute('href')).toBe('#box');
+    expect(doc.querySelector('#legacy-local')!.getAttributeNS(xlink, 'href')).toBe('#box');
+    expect(doc.querySelector('#repo')!.hasAttribute('href')).toBe(false);
+    expect(doc.querySelector('#repo-legacy')!.hasAttributeNS(xlink, 'href')).toBe(false);
+    expect(doc.querySelector('#external')!.getAttribute('href')).toBe('https://external.example/symbols.svg#box');
+  });
+
+  it('applies resource byte limits to SVG images without leaving browser-loaded references', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('<svg>too big</svg>', { headers: { 'content-type': 'image/svg+xml' } })) as typeof fetch;
+    const result = await resolveHtml('<svg xmlns:xlink="' + xlink + '"><image href="./large.svg" xlink:href="./large.svg"/></svg>', {
+      repoRef, target: 'sandbox', refresh: true, limits: { maxResourceBytes: 4 },
+    });
+    const doc = new DOMParser().parseFromString(result.html, 'text/html');
+    expect(doc.querySelector('image')!.attributes).toHaveLength(0);
+    expect(result.diagnostics.every(issue => issue.code === 'resource-fetch-failed')).toBe(true);
+    expect(result.diagnostics).toHaveLength(2);
+  });
+});

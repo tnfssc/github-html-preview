@@ -46,6 +46,8 @@ export interface ResolveOptions {
   target: 'sandbox' | 'sandbox-private';
   repoRef: RepoRef;
   privateRepo?: boolean;
+  /** Explicit document Retry: bypass HTTP cache for this resolution only. */
+  refresh?: boolean;
   signal?: AbortSignal;
   limits?: Partial<ResolveLimits>;
 }

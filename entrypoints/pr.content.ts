@@ -1422,10 +1422,8 @@ async function renderRichComparison(
     state.headRender?.destroy();
     state.baseRender = null;
     state.headRender = null;
-    state.comparison = null;
-    routeState.metadata = null;
-    routeState.fileMetadata = null;
-    routeState.sessionPullData = null;
+    // Keep this card pinned to its comparison commits and leave shared route
+    // metadata/in-flight work alone. Failed metadata promises clear themselves.
   }
   state.retryableFailures = 0;
   const controller = new AbortController();
@@ -1474,6 +1472,7 @@ async function renderRichComparison(
             routeState,
             controller.signal,
             info,
+            force,
           ),
         );
       }
@@ -1487,6 +1486,7 @@ async function renderRichComparison(
           routeState,
           controller.signal,
           info,
+          force,
         ),
       );
     }
@@ -1539,6 +1539,7 @@ async function renderComparisonSide(
   routeState: DiffRouteState,
   signal: AbortSignal,
   knownInfo: DiffFileInfo | null,
+  refresh: boolean,
 ): Promise<boolean> {
   const area = sideName === 'base' ? state.baseArea : state.headArea;
   try {
@@ -1551,6 +1552,7 @@ async function renderComparisonSide(
     try {
       file = await fetchRepositoryFile(repoRef, signal, {
         privateRepo: side.privateRepo,
+        refresh,
       });
     } catch (initialError) {
       const info = await getDiffFileInfo(
@@ -1567,6 +1569,7 @@ async function renderComparisonSide(
         repoRef = sideRepoRef(side, path);
         file = await fetchRepositoryFile(repoRef, signal, {
           privateRepo: side.privateRepo,
+          refresh,
         });
       } else if (sideName === 'base' && info?.status === 'added') {
         throw new ExpectedMissingSideError(
@@ -1585,6 +1588,7 @@ async function renderComparisonSide(
       target: 'sandbox-private',
       repoRef,
       privateRepo,
+      refresh,
       signal,
     });
     signal.throwIfAborted();

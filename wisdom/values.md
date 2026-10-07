@@ -11,3 +11,7 @@ Read traces before changing a smoke test. Fix a real product fault without weake
 ## Remember choices, not startup effects
 
 Read the saved view before mounting. Save explicit user choices, not the automatic default. Keep the local choice current while storage writes finish. This helps views that remount on SPA routes; it does not mean another tab must switch its active view. See [HTML view startup](html-view-startup.md).
+
+## Put user experience first
+
+Start with what people actually do, then remove the friction in that job. Rank work by how much it helps users, not by how many controls we can expose. Keep the successful preview path simple. This helps product priorities and UI choices; it is not a reason to weaken credential isolation. See [product review](product-review.md).

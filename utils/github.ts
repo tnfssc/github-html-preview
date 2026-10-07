@@ -43,6 +43,7 @@ export interface RepositoryBytes {
 export interface RepositoryFetchOptions {
   privateRepo?: boolean;
   maxBytes?: number;
+  refresh?: boolean;
 }
 
 export function parseBlobUrl(url: string | URL): RepoRef | null {
@@ -283,6 +284,7 @@ export async function fetchRepositoryBytes(
       buildRawUrl({ ...repoRef, path }),
       {
         signal,
+        ...(options.refresh ? { cache: 'reload' as const } : {}),
         credentials: 'omit',
         redirect: 'error',
         referrerPolicy: 'no-referrer',
@@ -320,6 +322,7 @@ export async function fetchRepositoryBytes(
     path,
     maxBytes,
     signal,
+    options.refresh ?? false,
   );
   if (sessionResource) return sessionResource;
   throw new Error(
@@ -334,6 +337,7 @@ async function fetchViaGitHubSession(
   path: string,
   maxBytes: number,
   signal: AbortSignal,
+  refresh: boolean,
 ): Promise<RepositoryBytes | null> {
   if (
     typeof location === 'undefined' ||
@@ -352,6 +356,7 @@ async function fetchViaGitHubSession(
       buildGitHubSessionRawUrl(repoRef, path),
       {
         signal,
+        ...(refresh ? { cache: 'reload' as const } : {}),
         credentials: 'same-origin',
         redirect: 'follow',
         referrerPolicy: 'same-origin',

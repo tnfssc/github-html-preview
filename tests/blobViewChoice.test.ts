@@ -184,7 +184,7 @@ describe('blob view choice', () => {
     await navigate('second.html', false);
     expect(mocks.fetch).toHaveBeenCalledWith(
       { owner: 'acme', repo: 'reports', ref: 'main', path: 'second.html' },
-      expect.any(AbortSignal), { privateRepo: false },
+      expect.any(AbortSignal), { privateRepo: false, refresh: false },
     );
     expect(mocks.resolve).toHaveBeenLastCalledWith('<h1>Fetched current file</h1>',
       expect.objectContaining({ repoRef: expect.objectContaining({ path: 'second.html' }) }));
@@ -250,4 +250,19 @@ describe('blob view choice', () => {
     expect(document.querySelector('.gh-html-preview-tab')).toBeNull();
     expect(mocks.resolve).not.toHaveBeenCalled();
   });
+});
+
+
+it('Retry fetches fresh HTML at the pinned commit instead of reusing embedded source', async () => {
+  mocks.resolve.mockResolvedValueOnce({ ...result, resources: { ...result.resources, failed: 1 },
+    diagnostics: [{ level: 'error', code: 'resource-fetch-failed', message: 'Failed image' }] });
+  start(); await settle();
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  expect(mocks.resolve.mock.calls[0][0]).toBe('<h1>first.html</h1>');
+  const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(b => b.textContent === 'Retry')!;
+  retry.click(); await vi.advanceTimersByTimeAsync(1); await settle();
+  expect(mocks.fetch).toHaveBeenCalledWith({ owner: 'acme', repo: 'reports', ref: oid, path: 'first.html' },
+    expect.any(AbortSignal), { privateRepo: false, refresh: true });
+  expect(mocks.resolve).toHaveBeenLastCalledWith('<h1>Fetched current file</h1>', expect.objectContaining({ refresh: true, repoRef: expect.objectContaining({ ref: oid }) }));
+  expect(Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'Retry')).toBe(false);
 });
