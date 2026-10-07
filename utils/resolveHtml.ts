@@ -486,6 +486,37 @@ async function resolvePrivateSandboxDocument(
   queueAttribute('link[href]:not([rel~="stylesheet"])', 'href');
   queueAttribute('iframe[src], embed[src]', 'src');
   queueAttribute('object[data]', 'data');
+  // HTML's SVG parser supplies the authored SVG/xlink namespaces. Work on
+  // attribute nodes, not HTML property setters or recreated attributes.
+  for (const element of Array.from(doc.querySelectorAll('image, use'))) {
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg') continue;
+    for (const attribute of Array.from(element.attributes)) {
+      if (
+        attribute.localName !== 'href' ||
+        (attribute.namespaceURI !== null &&
+          attribute.namespaceURI !== 'http://www.w3.org/1999/xlink')
+      ) continue;
+      if (element.localName === 'image') {
+        attributeJobs.push(
+          inlinePrivateAttribute(element, attribute.name, sourcePath, loader),
+        );
+      } else {
+        const resolved = resolveRepositoryUrl(
+          attribute.value, loader.repoRef, sourcePath,
+        );
+        if (resolved.kind !== 'repo') continue;
+        // Chromium does not render data-URL <use> in our opaque-origin sandbox.
+        // Do not pretend a fetch/embedding would refresh a working diagram.
+        loader.stats.skipped += 1;
+        loader.addDiagnostic(
+          'svg-use-not-packaged',
+          'Repository SVG <use> references cannot be packaged in this sandbox and were omitted. Embed the SVG symbols in this HTML and use href="#symbol", or use <image> for a standalone SVG.',
+          attribute.value,
+        );
+        element.removeAttributeNode(attribute);
+      }
+    }
+  }
   await Promise.all(attributeJobs);
 
   await Promise.all(
@@ -712,11 +743,17 @@ async function inlinePrivateAttribute(
   sourcePath: string,
   loader: ResourceLoader,
 ): Promise<void> {
-  const value = element.getAttribute(attribute);
-  if (!value) return;
-  const inlined = await privateResourceValue(value, sourcePath, loader);
-  if (inlined) element.setAttribute(attribute, inlined);
-  else element.removeAttribute(attribute);
+  const node = element.getAttributeNode(attribute);
+  if (!node?.value) return;
+  const inlined = await privateResourceValue(node.value, sourcePath, loader);
+  if (inlined) {
+    const resolved = resolveRepositoryUrl(node.value, loader.repoRef, sourcePath);
+    const svgImage =
+      element.namespaceURI === 'http://www.w3.org/2000/svg' &&
+      element.localName === 'image';
+    node.value = inlined +
+      (svgImage && resolved.kind === 'repo' ? resolved.hash ?? '' : '');
+  } else element.removeAttributeNode(node);
 }
 
 async function privateResourceValue(
