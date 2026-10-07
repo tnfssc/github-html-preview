@@ -353,7 +353,7 @@ export default defineContentScript({
   },
 });
 
-async function ensureResolved(route: RouteState): Promise<void> {
+async function ensureResolved(route: RouteState, refresh = false): Promise<void> {
   if (!route.active || route.controller.signal.aborted) return;
   if (route.render || route.resolving) return route.resolving ?? Promise.resolve();
   const controller = route.controller;
@@ -371,10 +371,11 @@ async function ensureResolved(route: RouteState): Promise<void> {
         privateRepo: route.isPrivate,
       });
       const sourceHtml =
-        route.sourceHtml ??
+        (!refresh ? route.sourceHtml : null) ??
         (
           await fetchRepositoryFile(route.repoRef, controller.signal, {
             privateRepo: route.isPrivate,
+            refresh,
           })
         ).text;
       controller.signal.throwIfAborted();
@@ -382,6 +383,7 @@ async function ensureResolved(route: RouteState): Promise<void> {
         target: 'sandbox-private',
         repoRef: route.repoRef,
         privateRepo: route.isPrivate,
+        refresh,
         signal: controller.signal,
       });
       controller.signal.throwIfAborted();
@@ -516,7 +518,7 @@ function retryResolution(route: RouteState): void {
   route.details.replaceChildren();
   route.details.style.display = 'none';
   route.previewArea.replaceChildren(message('Retrying preview resources…'));
-  void ensureResolved(route);
+  void ensureResolved(route, true);
 }
 
 function createActionButton(

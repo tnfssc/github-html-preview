@@ -6,6 +6,7 @@ import {
   resolveRepositoryUrl,
   transformSrcset,
 } from '../utils/resolveHtml';
+import { fetchRepositoryFile } from '../utils/github';
 import type { RepoRef } from '../utils/types';
 
 const repoRef: RepoRef = {
@@ -621,3 +622,60 @@ function decodeDataUrl(url: string): string {
   const encoded = url.split(',')[1] ?? '';
   return atob(encoded);
 }
+
+
+describe('scoped document Retry', () => {
+  it('reloads only the selected source and its packaged public graph; normal documents keep caching', async () => {
+    const selected = { ...repoRef, path: 'selected/index.html' };
+    const other = { ...repoRef, path: 'other/index.html' };
+    let version = 'old';
+    const cache = new Map<string, string>();
+    const requests: Array<{ path: string; init?: RequestInit }> = [];
+    const html = (value: string) => '<h1>' + value + '</h1>' +
+      '<style>@import "./theme.css";</style><img src="./chart.png">' +
+      '<script type="module" src="./main.js"></script>' +
+      '<img src="https://external.example/image.png">';
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const path = new URL(url).pathname.split('/').slice(4).join('/');
+      requests.push({ path, init });
+      const name = path.split('/').pop();
+      const fresh = name === 'index.html' ? html(version) :
+        name === 'theme.css' ? '@import "./nested.css"; @font-face { font-family: report; src: url("./font.woff2") }' :
+        name === 'nested.css' ? 'h1 { --version: ' + version + '; background: url("./background.png") }' :
+        name === 'main.js' ? 'import { value } from "./child.js"; import("./lazy.js");' :
+        name === 'child.js' || name === 'lazy.js' ? 'export const value = "' + version + '";' : version;
+      if (!cache.has(url) || init?.cache === 'reload') cache.set(url, fresh);
+      return new Response(cache.get(url), { headers: { 'content-type': name?.endsWith('.css') ? 'text/css' : 'application/octet-stream' } });
+    }) as typeof fetch;
+    // Prime both documents' repository assets using the packaging path.
+    for (const ref of [selected, other]) {
+      const source = await fetchRepositoryFile(ref, new AbortController().signal);
+      await resolveHtml(source.text, { target: 'sandbox-private', privateRepo: false, repoRef: ref });
+    }
+    version = 'fresh';
+    const start = requests.length;
+    const source = await fetchRepositoryFile(selected, new AbortController().signal, { refresh: true });
+    const refreshed = await resolveHtml(source.text, { target: 'sandbox', repoRef: selected, refresh: true });
+    const freshDoc = new DOMParser().parseFromString(refreshed.html, 'text/html');
+    expect(freshDoc.querySelector('h1')?.textContent).toBe('fresh');
+    expect(freshDoc.querySelector('style')?.textContent).toContain('--version: fresh');
+    expect(freshDoc.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,' + btoa('fresh'));
+    const imports = JSON.parse(freshDoc.querySelector('script[type="importmap"]')!.textContent!).imports;
+    expect(atob(imports['https://private-preview.invalid/selected/child.js'].split(',')[1])).toContain('fresh');
+    expect(atob(imports['https://private-preview.invalid/selected/lazy.js'].split(',')[1])).toContain('fresh');
+    expect(atob(imports['https://private-preview.invalid/selected/main.js'].split(',')[1])).toContain('import("https://private-preview.invalid/selected/lazy.js")');
+    expect(refreshed.diagnostics).toEqual([]);
+    const retryRequests = requests.slice(start);
+    expect(retryRequests.map(r => r.path).sort()).toEqual([
+      'index.html', 'theme.css', 'nested.css', 'font.woff2', 'background.png', 'chart.png', 'main.js', 'child.js', 'lazy.js',
+    ].map(name => 'selected/' + name).sort());
+    expect(retryRequests.every(r => r.init?.cache === 'reload' && r.init.credentials === 'omit')).toBe(true);
+    const normalStart = requests.length;
+    const normalSource = await fetchRepositoryFile(other, new AbortController().signal);
+    const normal = await resolveHtml(normalSource.text, { target: 'sandbox', repoRef: other });
+    expect(normal.html).toContain('<h1>old</h1>');
+    expect(normal.html).toContain('cdn.jsdelivr.net/gh/acme/reports@' + repoRef.ref + '/other/chart.png');
+    expect(requests.slice(normalStart).every(r => r.path.startsWith('other/') && r.init?.cache === undefined)).toBe(true);
+  });
+});

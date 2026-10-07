@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getPreferences: vi.fn(), savePreferences: vi.fn(), watchPreferences: vi.fn(),
-  fetchFile: vi.fn(), fetchMetadata: vi.fn(),
+  fetchFile: vi.fn(), fetchMetadata: vi.fn(), resolve: vi.fn(),
 }));
 vi.mock('../utils/storage', () => ({
   enabledStorage: { getValue: async () => true, watch: () => () => {} },
@@ -24,7 +24,7 @@ vi.mock('../utils/github', () => ({
 vi.mock('../utils/debug', () => ({ debugLog: () => {}, debugError: () => {} }));
 vi.mock('../utils/fetchWithRetry', () => ({ fetchWithRetry: mocks.fetchMetadata }));
 vi.mock('../utils/resolveHtml', () => ({
-  resolveHtml: async () => ({ resources: { failed: 0, skipped: 0 } }),
+  resolveHtml: mocks.resolve,
 }));
 vi.mock('../utils/renderer', () => ({
   renderExecutablePreview: (area: HTMLElement) => {
@@ -95,6 +95,7 @@ beforeEach(() => {
   mocks.savePreferences.mockResolvedValue(undefined);
   mocks.watchPreferences.mockImplementation((callback) => { preferenceWatcher = callback; return () => {}; });
   mocks.fetchFile.mockResolvedValue({ text: '<h1>Hello</h1>', authenticated: false });
+  mocks.resolve.mockResolvedValue({ resources: { failed: 0, skipped: 0 } });
   page();
 });
 afterEach(() => {
@@ -209,4 +210,34 @@ describe('PR HTML view loading', () => {
     expect(button('Code').getAttribute('aria-selected')).toBe('true');
     expect(mocks.savePreferences.mock.calls.map(([value]) => value.mode)).toEqual(['source', 'split']);
   });
+});
+
+
+it('Retry is card-local, pins base/head commits, and leaves another preview in flight', async () => {
+  mocks.resolve.mockResolvedValue({ resources: { failed: 1, skipped: 0 } });
+  const files = document.querySelector('#files')!;
+  const second = files.firstElementChild!.cloneNode(true) as HTMLElement;
+  second.dataset.path = 'other.html'; files.append(second);
+  const pending = deferred<{ text: string; authenticated: boolean }>();
+  mocks.fetchFile.mockImplementation((ref) => ref.path === 'other.html' ? pending.promise : Promise.resolve({ text: '<h1>Hello</h1>', authenticated: false }));
+  await mount();
+  expect(mocks.fetchFile.mock.calls).toHaveLength(4);
+  const firstPanel = document.querySelector<HTMLElement>('.gh-html-preview-pr-rich')!;
+  // A changed page payload must not move the retried card to new commits.
+  const data = document.querySelector('script[data-target="react-app.embeddedData"]')!;
+  data.textContent = data.textContent!.replaceAll(baseSha, 'c'.repeat(40)).replaceAll(headSha, 'd'.repeat(40));
+  mocks.resolve.mockResolvedValue({ resources: { failed: 0, skipped: 0 } });
+  const retry = Array.from(firstPanel.querySelectorAll('button')).find(b => b.textContent === 'Retry')!;
+  retry.click(); await settle();
+  const freshCalls = mocks.fetchFile.mock.calls.slice(4);
+  expect(freshCalls.map(call => call[0])).toEqual([
+    expect.objectContaining({ path: 'index.html', ref: baseSha }),
+    expect.objectContaining({ path: 'index.html', ref: headSha }),
+  ]);
+  expect(freshCalls.every(call => call[2].refresh === true)).toBe(true);
+  expect(mocks.resolve.mock.calls.slice(2).every(call => call[1].refresh === true)).toBe(true);
+  expect(mocks.fetchFile.mock.calls.filter(call => call[0].path === 'other.html').every(call => call[1].aborted === false && !call[2].refresh)).toBe(true);
+  pending.resolve({ text: '<h1>Other</h1>', authenticated: false }); await settle();
+  expect(document.querySelectorAll('.gh-html-preview-pr-rich iframe')).toHaveLength(4);
+  expect(mocks.fetchMetadata).not.toHaveBeenCalled();
 });

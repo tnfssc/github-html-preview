@@ -270,3 +270,21 @@ describe('repository fetching', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it('private Retry reloads only the exact session URL without public transport or credentials leakage', async () => {
+  vi.stubGlobal('location', new URL('https://github.com/private-owner/private-repo/blob/main/report.html'));
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const response = new Response('private HTML', { headers: { 'content-type': 'text/plain' } });
+    Object.defineProperty(response, 'url', { value: String(input) });
+    return response;
+  });
+  globalThis.fetch = fetchMock as typeof fetch;
+  await fetchRepositoryFile(repoRef, new AbortController().signal, { privateRepo: true, refresh: true });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0]).toEqual([buildGitHubSessionRawUrl(repoRef), expect.objectContaining({ cache: 'reload', credentials: 'same-origin', referrerPolicy: 'same-origin' })]);
+  expect(fetchMock.mock.calls[0][1]?.headers).toBeUndefined();
+  fetchMock.mockClear();
+  await fetchRepositoryFile(repoRef, new AbortController().signal, { privateRepo: true });
+  expect(fetchMock.mock.calls[0][1]?.cache).toBeUndefined();
+});

@@ -2096,3 +2096,94 @@ function delay(milliseconds: number): Promise<void> {
   setTimeout(resolve, milliseconds);
   return promise;
 }
+
+
+test('Retry freshens only its blob source and transitive graph', async () => {
+  const { context, page, extensionId } = await launchWithExtension();
+  const unrelated = await context.newPage();
+  const selectedUrl = 'https://github.com/acme/reports/blob/main/selected/index.html';
+  const otherUrl = 'https://github.com/acme/reports/blob/main/other/index.html';
+  const requests: string[] = [];
+  let retrying = false;
+  const html = (version: string) => '<h1 id="version">' + version + '</h1>' +
+    '<style>@import "./theme.css";</style><img id="chart" src="./chart.png">' +
+    '<img src="./recover.png"><output id="module">waiting</output>' +
+    '<script type="module" src="./main.js"></script>';
+  try {
+    // Routing disables Chromium's HTTP cache. The unit regression proves
+    // cache-mode behavior; this checks fresh graph rendering and request scope.
+    await context.route('**/*', async route => {
+      const url = route.request().url();
+      if (url === selectedUrl || url === otherUrl) {
+        const path = url === selectedUrl ? 'selected/index.html' : 'other/index.html';
+        await route.fulfill({ status: 200, contentType: 'text/html', body: githubBlobFixture(html('cached'), commit, path) });
+        return;
+      }
+      if (url.startsWith(rawBase + '/')) {
+        const path = url.slice(rawBase.length + 1);
+        requests.push(path);
+        const reload = retrying && path.startsWith('selected/');
+        const name = path.split('/').pop();
+        const version = reload ? 'fresh' : 'cached';
+        if (path === 'selected/recover.png' && !reload) {
+          await route.fulfill({ status: 400, body: 'resource unavailable' }); return;
+        }
+        const body = name === 'index.html' ? html(version) :
+          name === 'theme.css' ? '@import "./nested.css"; @font-face { font-family: report; src: url("./font.woff2") }' :
+          name === 'nested.css' ? 'h1 { color: ' + (reload ? 'rgb(4, 5, 6)' : 'rgb(1, 2, 3)') + '; background: url("./background.png") }' :
+          name === 'main.js' ? 'import { value } from "./child.js"; import("./lazy.js").then(() => document.querySelector("#module").textContent = value);' :
+          name === 'child.js' || name === 'lazy.js' ? 'export const value = "' + version + '";' : version;
+        await route.fulfill({ status: 200, contentType: name?.endsWith('.css') ? 'text/css' : name?.endsWith('.js') ? 'application/javascript' : name?.endsWith('.html') ? 'text/html' : 'application/octet-stream', headers: { 'cache-control': 'public, max-age=3600' }, body });
+        return;
+      }
+      if (url.startsWith('chrome-extension:')) { await route.continue(); return; }
+      await route.abort();
+    });
+    await page.goto(selectedUrl);
+    const selected = page.locator('.gh-html-preview-container');
+    await selected.getByText('View resource issues', { exact: true }).click();
+    await expect(selected.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await unrelated.goto(otherUrl);
+    const other = unrelated.locator('.gh-html-preview-container');
+    await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#module')).toHaveText('cached');
+    // Observe RequestInit in the extension isolated world without changing it.
+    // Interception occurs before Chromium adds HTTP cache directives.
+    const cdp = await context.newCDPSession(page);
+    const worlds: number[] = [];
+    cdp.on('Runtime.executionContextCreated', event => worlds.push(event.context.id));
+    await cdp.send('Runtime.enable');
+    let extensionWorld: number | undefined;
+    for (const contextId of worlds) {
+      const identity = await cdp.send('Runtime.evaluate', { contextId,
+        expression: 'globalThis.chrome?.runtime?.id', returnByValue: true });
+      if (identity.result.value === extensionId) extensionWorld = contextId;
+    }
+    expect(extensionWorld).toBeDefined();
+    await cdp.send('Runtime.evaluate', { contextId: extensionWorld, expression:       'globalThis.retryRequests = []; const originalFetch = globalThis.fetch; globalThis.fetch = function(input, init) { retryRequests.push({ url: String(input), cache: init?.cache }); return originalFetch.call(this, input, init); }' });
+    const start = requests.length;
+    retrying = true;
+    await selected.getByRole('button', { name: 'Retry' }).click();
+    const frame = selected.locator('iframe[title="Executable HTML preview"]').contentFrame();
+    await expect(frame.locator('#version')).toHaveText('fresh');
+    await expect(frame.locator('#module')).toHaveText('fresh');
+    await expect(frame.locator('h1')).toHaveCSS('color', 'rgb(4, 5, 6)');
+    await expect(frame.locator('#chart')).toHaveAttribute('src', 'data:image/png;base64,' + Buffer.from('fresh').toString('base64'));
+    await expect(selected.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+    const observed = await cdp.send('Runtime.evaluate', { contextId: extensionWorld,
+      expression: 'retryRequests', returnByValue: true });
+    expect(observed.result.value).toHaveLength(10);
+    expect(observed.result.value.every((request: { url: string; cache: string }) =>
+      request.cache === 'reload' && request.url.startsWith(rawBase + '/selected/'))).toBe(true);
+    expect(requests.slice(start).every(path => path.startsWith('selected/'))).toBe(true);
+    expect(requests.slice(start).sort()).toEqual([
+      'index.html', 'theme.css', 'nested.css', 'font.woff2', 'background.png', 'chart.png', 'recover.png', 'main.js', 'child.js', 'lazy.js',
+    ].map(name => 'selected/' + name).sort());
+    await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#version')).toHaveText('cached');
+    const normalStart = requests.length;
+    await unrelated.reload();
+    await expect(other.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#module')).toHaveText('cached');
+    expect(requests.slice(normalStart).every(path => path.startsWith('other/'))).toBe(true);
+  } finally {
+    await context.close();
+  }
+});
