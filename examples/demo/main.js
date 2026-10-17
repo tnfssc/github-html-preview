@@ -41,8 +41,8 @@ uniform float uWide;
 
 const vec3 INK = vec3(0.078, 0.067, 0.165);
 const vec3 VIOLET = vec3(0.149, 0.129, 0.267);
-const vec3 APRICOT = vec3(1.0, 0.694, 0.478);
-const vec3 PERSIMMON = vec3(1.0, 0.443, 0.310);
+const vec3 APRICOT = vec3(0.557, 0.961, 0.816);
+const vec3 PERSIMMON = vec3(0.247, 0.784, 0.949);
 const vec3 CREAM = vec3(1.0, 0.92, 0.84);
 const vec3 LILAC = vec3(0.56, 0.48, 0.95);
 const int RIBBONS = 7;
