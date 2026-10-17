@@ -1,83 +1,65 @@
-# GitHub HTML Preview
+<p align="center">
+  <img src="store/screenshots/marquee-1400x560.png" alt="GitHub HTML Preview: see the page, not the markup" width="100%">
+</p>
 
-Chrome extension for running and comparing commit-pinned public and private `.html` and `.htm` files directly on GitHub.
+<h1 align="center">GitHub HTML Preview</h1>
 
-## Product behavior
+<p align="center">
+  <strong>See the page, not the markup.</strong><br>
+  Run any <code>.html</code> file right on GitHub, and review HTML pull requests side by side, before and after.
+</p>
 
-- Blob pages get a **Preview** tab beside GitHub's file controls. Repository scripts run in an isolated executable frame; repository CSS and module graphs are packaged against the exact commit.
-- Preview headers disclose **Executable · Scripts and network access on**. Preview code cannot access extension APIs, GitHub's parent DOM, or extension storage, but it can communicate with external services.
-- **Open full preview** opens the same commit-pinned document in a dedicated executable sandbox.
-- Preview frames default to dark media queries and a dark document canvas, independently of GitHub's theme. Authored color-scheme declarations, colors, and backgrounds remain intact.
-- Pull-request, commit, and release-compare file views get lightweight **Code** and **Preview** controls. Comparisons use exact base and head repositories and commits, including forks.
-- HTML views start in **Preview** unless you last chose **Code**. File browsing and comparisons remember their choices separately. Starting in Code skips preview loading. Comparisons show one loading area, then only the available versions.
-- Added and deleted files render whichever side exists; edited files render before and after.
-- Private repository assets are packaged as data URLs into the sandbox; public repository subresources are rewritten to commit-pinned CDN URLs (jsDelivr). Both paths are commit-pinned. Fragment links stay inside the preview; links to other repository documents open the exact-ref GitHub blob in a new tab.
-- Before/after scrolling uses shared HTML IDs, named anchors, and matching headings to align corresponding content. It interpolates between matched anchors and falls back to proportional document progress when no shared anchor exists.
-- GitHub SPA navigation, commit-filtered PR routes, lazy `Load Diff` cards, and oversized commit/release diffs are supported. PR views use GitHub's native file cards; fallback cards are limited to commit and compare pages where GitHub omits the diff DOM.
-- File collapse hides and restores active previews with GitHub's native card. Inline review comments stay visible in Preview while unrelated source rows remain hidden.
-- UI stays light: show only controls required for primary preview flow. Put necessary secondary actions in a kebab menu instead of persistent toolbars, panels, or explanatory sections.
-- Public repositories need no credentials.
-- Private and SSO-protected repositories use the current signed-in `github.com` browser session. The extension never asks for, accepts, or stores a personal access token.
-- Existing `githubToken` values from older releases are deleted automatically.
-- Exact-ref raw responses are packaged in the GitHub content script. No background file tabs are opened.
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/github-html-preview/bhgobcihfebfgcgmdagfgpenamjfpfga"><img alt="Add to Chrome" src="https://img.shields.io/badge/Add%20to%20Chrome-FF714F?style=for-the-badge&logo=googlechrome&logoColor=white"></a>
+  &nbsp;
+  <a href="https://github.com/tnfssc/github-html-preview/blob/develop/examples/demo/index.html"><img alt="Try the demo" src="https://img.shields.io/badge/Try%20the%20demo-262144?style=for-the-badge"></a>
+  &nbsp;
+  <a href="https://github.com/tnfssc/github-html-preview/pull/28/files"><img alt="See an example PR" src="https://img.shields.io/badge/See%20an%20example%20PR-262144?style=for-the-badge"></a>
+</p>
 
-## Preview annotations
+---
 
-Pull-request previews support element-level review pins backed by ordinary PR conversation comments.
+Reports, prototypes, docs, email templates, coverage output: plenty of HTML lives on GitHub, and GitHub only shows you its source. GitHub HTML Preview adds a **Preview** tab that runs the real page, with its own CSS and JavaScript, at the exact commit you're looking at. You don't need to clone, run `python -m http.server`, or download a zip first.
 
-- Select text in a rendered preview and choose **Comment** to draft a note. The extension opens GitHub's native composer prefilled with your text plus a hidden `<!-- gh-html-preview-anchor:… -->` payload; nothing posts until you submit it on GitHub.
-- Comments carrying that payload render as numbered pins on the anchored element in every matching file preview. Click a pin for an inline card with the author and excerpt, and jump straight to the GitHub comment.
-- Anchored comments on the conversation tab get a **Show in HTML preview** link that deep-links back: the files tab opens, scrolls the matching preview, and flashes the anchored element.
-- Anchors are a CSS-path plus text-quote pair, so they survive small document edits; anchors whose element disappears simply stop rendering a pin.
-- Metadata rides inside normal comments, so pins work for anyone with the extension and stay invisible to everyone else. Reading works for public repositories signed out; private repositories use the same signed-in session as preview packaging.
+<p align="center">
+  <img src="store/screenshots/01-preview-tab.png" alt="Preview tab next to Code and Blame on a GitHub HTML file" width="80%">
+</p>
 
-## Enterprise organization SSO
+## Review HTML changes the way they look
 
-Sign into GitHub and complete organization SSO in the same tab before opening Preview. No extension credential setup exists.
+Pull requests, commits and comparisons get **Code** and **Preview** controls. Edited files render before and after side by side, and scrolling stays in sync by matching headings and anchors. Added and deleted files render the side that exists. Forks work too: each side loads from its own repo and commit.
 
-PR views recover base/head metadata from GitHub's embedded page data instead of requiring authenticated REST API access. Repository files use GitHub's same-origin `/raw/<ref>/<path>` route with the existing browser session. GitHub may redirect that request to a short-lived signed `raw.githubusercontent.com` URL; the extension validates the response origin and packages only response bytes.
+<p align="center">
+  <img src="store/screenshots/02-before-after.png" alt="Before and after previews of an HTML file in a pull request" width="80%">
+</p>
 
-Security boundaries:
+## Everything you get
 
-- Session cookies remain browser-managed and are never read by extension code.
-- Signed raw URLs are never placed in preview HTML, logs, storage, or diagnostics.
-- Login pages and other non-raw HTML responses are rejected.
-- Private fetches run only inside a `https://github.com` content script.
-- Full preview receives an already packaged snapshot through `chrome.storage.session`; snapshots expire after five minutes and are removed when the source route closes.
-- Self-hosted GitHub Enterprise Server domains are not currently matched; session access targets GitHub Enterprise Cloud organizations on `github.com`.
+- **One click from Code to Preview.** Your last choice sticks across files and pull requests.
+- **Pinned to the exact commit.** The page, its stylesheets, scripts and images all come from the commit on screen, never the latest branch tip.
+- **Full-tab preview.** **Open full preview** runs the page in its own tab.
+- **Comments pinned to the page.** Select text in a PR preview and choose **Comment** to anchor a normal PR comment to that element. Teammates with the extension see numbered pins; everyone else sees a plain comment.
+- **Private repos, no tokens.** Private and SSO-protected repos use the GitHub session you're already signed into. The extension never asks for or stores a personal access token.
+- **Fits into GitHub.** It follows GitHub's single-page navigation, collapsed files, lazy-loaded diffs and inline review comments, and adds no extra panels.
 
-## Product requirements
+<table>
+  <tr>
+    <td><img src="store/screenshots/03-code-preview.png" alt="Switching between Code and Preview"></td>
+    <td><img src="store/screenshots/04-full-preview.png" alt="Full-tab preview"></td>
+  </tr>
+</table>
 
-- Preview behavior must survive GitHub client-side navigation without a reload.
-- Blob, PR, commit, commit-filtered PR, and release-comparison routes must render exact commit-pinned HTML.
-- Added and removed HTML must use one full-width pane. Never render an empty opposite pane.
-- Edited HTML must render both revisions without visible **Before**, **After**, or **Ready** labels.
-- Successful previews must not show resource panels or persistent diagnostics. Resource failures must remain actionable.
-- Network failures and HTTP `408`, `425`, `429`, and `5xx` responses retry automatically three times with bounded exponential backoff. After exhaustion—or immediately for permanent failures—a failure-only **Retry** action refetches the selected HTML and its supported repository resource graph with fresh HTTP requests, without reloading GitHub or clearing unrelated caches. PR Retry keeps the same base/head commits and leaves other file previews alone. External resources and arbitrary runtime requests keep their normal browser behavior.
-- Review comments and GitHub collapse/expand behavior must continue working in Preview.
-- GitHub native and extension fallback cards must never produce duplicate previews.
-- Long HTML must remain scrollable. Edited panes must synchronize semantically when stable anchors exist and proportionally otherwise.
-- UI must remain visually light. Persistent controls are limited to primary actions; necessary secondary actions belong in a kebab menu.
-- Private-repository support must never collect credentials or expose session cookies and signed raw URLs to preview content, logs, screenshots, or release artifacts.
+## Is it safe?
 
-## Comparison scroll synchronization
+Previews are **executable**: the file's scripts really run. They run in a sandboxed frame with an opaque origin, so preview code **cannot** read your GitHub cookies or session, touch the GitHub page around it, use extension APIs, or fetch other repos as you.
 
-Scroll synchronization is always active for two-pane comparisons:
+It **can** reach the network, like any web page you visit. So a hostile page could send its own contents somewhere, draw a fake login box, or burn CPU. Preview code you trust, the same way you'd treat a link you click. Details are in the [security model](.docs/security-model.md).
 
-1. Renderer indexes unique element IDs, named anchors, and normalized headings once per document layout.
-2. Scroll events identify surrounding anchors and progress between them.
-3. Matching target anchors map corresponding content; progress is interpolated between matching pairs.
-4. A single matching anchor preserves local pixel offset.
-5. Missing anchors fall back to normalized horizontal and vertical scroll progress.
-6. Programmatic target scrolling is suppressed from feeding back into source pane.
+## Try it in 10 seconds
 
-Anchor indexes rebuild after relevant DOM or layout changes and are capped to avoid unbounded work on hostile documents.
-
-Design follows established diff-view behavior: CodeMirror aligns unchanged content in merge views, while Monaco exposes paired editor scroll and diff APIs rather than recommending raw document-pixel coupling.
-
-- [CodeMirror merge view reference](https://codemirror.net/docs/ref/#merge.MergeView)
-- [Monaco diff editor API](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor.IDiffEditor.html)
-- [Monaco editor scroll API](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.ICodeEditor.html)
+1. [Add it to Chrome](https://chromewebstore.google.com/detail/github-html-preview/bhgobcihfebfgcgmdagfgpenamjfpfga).
+2. Open the [animated demo](https://github.com/tnfssc/github-html-preview/blob/develop/examples/demo/index.html). The page you see is [`examples/demo/`](examples/demo), three plain files rendered live.
+3. Open the [example pull request](https://github.com/tnfssc/github-html-preview/pull/28/files) and compare before and after.
 
 ## Development
 
@@ -109,8 +91,11 @@ Debug builds output to `.output/chrome-mv3-debug/`. Reproduce problems with GitH
 
 Diagnostic logs include lifecycle events, repository paths, HTTP status, resource counts, timings, and failures. They exclude tokens and file contents.
 
-## Execution boundary
+Store screenshots live in [`store/`](store): `node store/capture.mjs` captures raw shots from a build, and `node store/render.mjs` composes them.
 
-Privileged extension contexts handle local settings, authenticated GitHub API requests, and repository packaging. Executable repository content runs in `sandbox.html` with an opaque origin and without `allow-same-origin`. It cannot access extension APIs, extension storage, GitHub cookies, or the parent DOM.
+## Learn more
 
-Public and private repository resources are fetched at exact refs before sandbox delivery. Private resources become token-free data URLs. External resources remain external, and preview scripts can send rendered data to external services. Only preview code you trust.
+- [Product behavior and requirements](.docs/behavior.md): exact behavior, organization SSO, scroll sync, and the execution boundary.
+- [Product specification](PRODUCT.md)
+- [Security model](.docs/security-model.md)
+- [Research notes](.docs/README.md)
