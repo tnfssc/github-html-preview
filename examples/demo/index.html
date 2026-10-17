@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#14112a">
+  <title>This page lives in a GitHub repo · GitHub HTML Preview</title>
+  <meta name="description" content="A live demo rendered by the GitHub HTML Preview extension: index.html, style.css and main.js, straight from the repository.">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <canvas id="ribbons" class="ribbons" aria-hidden="true"></canvas>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor-glow" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 128 128" aria-hidden="true">
+        <rect x="4" y="4" width="120" height="120" rx="28" fill="#262144"/>
+        <g transform="rotate(-28 64 64)">
+          <path d="M34 29 82 25Q86 25 89 29L104 47 55 66 86 97 54 108 27 88 23 63Q22 59 24 54Z" fill="#FF714F"/>
+          <path d="M34 29 82 25Q86 25 89 29L104 47 55 66 23 63Q22 59 24 54Z" fill="#FFB17A"/>
+        </g>
+      </svg>
+      <span>GitHub HTML Preview</span>
+    </div>
+    <div class="live-pill" title="This page is running JavaScript right now">
+      <span class="live-dot"></span>
+      <span>Live</span>
+      <span class="live-sep">·</span>
+      <span id="pill-fps">-- fps</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="top">
+      <div class="hero-inner">
+        <p class="kicker reveal-now"><span class="path">examples/demo/</span><b>index.html</b></p>
+        <h1 class="headline" data-split aria-label="This page lives in a GitHub repo.">
+          <span class="line">This page lives</span>
+          <span class="line">in a <em>GitHub repo.</em></span>
+        </h1>
+        <p class="lede reveal-now">
+          You’re not looking at a screenshot. This is <code>index.html</code> from the repository,
+          with its own <code>style.css</code> and <code>main.js</code>, rendered live in a sandboxed
+          frame right here on GitHub.
+        </p>
+        <div class="hero-actions reveal-now">
+          <p class="code-hint">
+            Want to see the source? Press <kbd>Code</kbd> above this frame.
+          </p>
+          <ul class="files" aria-label="Files that make up this page">
+            <li class="file magnetic" style="--c: var(--apricot)"><span class="dot"></span>index.html</li>
+            <li class="file magnetic" style="--c: var(--persimmon)"><span class="dot"></span>style.css</li>
+            <li class="file magnetic" style="--c: var(--lilac)"><span class="dot"></span>main.js</li>
+          </ul>
+        </div>
+      </div>
+      <p class="tap-hint reveal-now" aria-hidden="true"><span class="tap-ring"></span>Move or tap to fold the ribbons</p>
+      <div class="scroll-cue" aria-hidden="true"><span></span></div>
+    </section>
+
+    <section class="band" aria-hidden="true">
+      <div class="marquee" data-marquee="1"><span>Blob pages · Pull requests · Before &amp; after · Commit-pinned · Sandboxed · Private repos ·&nbsp;</span><span>Blob pages · Pull requests · Before &amp; after · Commit-pinned · Sandboxed · Private repos ·&nbsp;</span></div>
+      <div class="marquee outline" data-marquee="-1"><span>index.html + style.css + main.js = one live page ·&nbsp;</span><span>index.html + style.css + main.js = one live page ·&nbsp;</span></div>
+    </section>
+
+    <section class="section" id="how">
+      <header class="section-head reveal">
+        <p class="eyebrow">How this frame got here</p>
+        <h2>Three files. <em>One exact commit.</em></h2>
+      </header>
+      <ol class="pipeline">
+        <li class="step reveal" data-tilt style="--d: 0ms">
+          <span class="step-n">01</span>
+          <h3>Read at the commit</h3>
+          <p>The extension takes <code>index.html</code> from the exact commit this GitHub page shows, not the latest branch tip.</p>
+        </li>
+        <li class="step reveal" data-tilt style="--d: 120ms">
+          <span class="step-n">02</span>
+          <h3>Resolve its files</h3>
+          <p>Relative links to <code>style.css</code> and <code>main.js</code> are pinned to that same commit and packaged with the page.</p>
+        </li>
+        <li class="step reveal" data-tilt style="--d: 240ms">
+          <span class="step-n">03</span>
+          <h3>Run it in a sandbox</h3>
+          <p>Everything executes in an isolated frame with an opaque origin, so it can’t touch GitHub’s page or the extension.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section" id="proof">
+      <header class="section-head reveal">
+        <p class="eyebrow">Proof, measured by <code>main.js</code></p>
+        <h2>Running right now, <em>not a picture.</em></h2>
+      </header>
+      <div class="proof-grid">
+        <article class="stat reveal" data-tilt>
+          <p class="stat-label">Frames rendered</p>
+          <p class="stat-value" id="stat-frames">0</p>
+          <p class="stat-note">by the ribbon shader behind this text</p>
+        </article>
+        <article class="stat reveal" data-tilt style="--d: 80ms">
+          <p class="stat-label">Frame rate</p>
+          <p class="stat-value"><span id="stat-fps">--</span><small>fps</small></p>
+          <p class="stat-note">paused while you’re not looking</p>
+        </article>
+        <article class="stat reveal" data-tilt style="--d: 160ms">
+          <p class="stat-label">This frame’s origin</p>
+          <p class="stat-value mono" id="stat-origin">…</p>
+          <p class="stat-note" id="stat-origin-note">read from <code>self.origin</code></p>
+        </article>
+        <article class="stat reveal" data-tilt style="--d: 240ms">
+          <p class="stat-label">Viewport</p>
+          <p class="stat-value mono" id="stat-viewport">…</p>
+          <p class="stat-note">resize the window and watch it change</p>
+        </article>
+      </div>
+
+      <div class="resolved reveal" id="resolved">
+        <div class="resolved-head">
+          <p class="eyebrow">Where this page’s files came from</p>
+          <p class="pin" id="pin" hidden>Pinned to <span id="pin-sha" class="mono"></span></p>
+        </div>
+        <ul class="resolved-list" id="resolved-list">
+          <li><span class="rf">style.css</span><span class="rv mono">checking…</span></li>
+          <li><span class="rf">main.js</span><span class="rv mono">checking…</span></li>
+        </ul>
+        <p class="resolved-note" id="resolved-note">Read live from this document’s own <code>&lt;link&gt;</code> and <code>&lt;script&gt;</code>.</p>
+      </div>
+    </section>
+
+    <section class="section" id="where">
+      <header class="section-head reveal">
+        <p class="eyebrow">Where it works</p>
+        <h2>Everywhere HTML <em>shows up on GitHub.</em></h2>
+      </header>
+      <div class="features">
+        <article class="feature reveal" data-tilt>
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5z"/><path d="M14 3v5h5"/></svg>
+          </div>
+          <h3>Blob pages</h3>
+          <p>A <b>Preview</b> tab next to Code and Blame, plus a full-tab preview of the same commit.</p>
+        </article>
+        <article class="feature reveal" data-tilt style="--d: 80ms">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg>
+          </div>
+          <h3>Before &amp; after</h3>
+          <p>Pull requests, commits and compares render base and head side by side, with scrolling kept in sync.</p>
+        </article>
+        <article class="feature reveal" data-tilt style="--d: 160ms">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          </div>
+          <h3>Private repos</h3>
+          <p>Uses the GitHub session you’re already signed into. No tokens to paste, nothing stored.</p>
+        </article>
+        <article class="feature reveal" data-tilt style="--d: 240ms">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg>
+          </div>
+          <h3>Executable, isolated</h3>
+          <p>Scripts and network access are on, walled off from GitHub and the extension. Preview code you trust.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="outro" id="outro">
+      <svg class="outro-mark reveal" viewBox="0 0 128 128" aria-hidden="true">
+        <g transform="rotate(-28 64 64)">
+          <path class="fold-under" d="M34 29 82 25Q86 25 89 29L104 47 55 66 86 97 54 108 27 88 23 63Q22 59 24 54Z" fill="#FF714F"/>
+          <path class="fold-top" d="M34 29 82 25Q86 25 89 29L104 47 55 66 23 63Q22 59 24 54Z" fill="#FFB17A"/>
+        </g>
+      </svg>
+      <h2 class="outro-title reveal" data-split aria-label="Now press Code.">
+        <span class="line">Now press <em>Code.</em></span>
+      </h2>
+      <p class="outro-copy reveal">Every pixel above came from three plain files in this folder. Flip back to Preview any time.</p>
+      <p class="footnote reveal">examples/demo · index.html · style.css · main.js</p>
+    </section>
+  </main>
+
+  <script src="./main.js" defer></script>
+</body>
+</html>
