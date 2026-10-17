@@ -1,0 +1,179 @@
+@font-face {
+  font-family: 'Inter';
+  src: url('../fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: block;
+}
+
+:root {
+  --violet: #262144;
+  --ink: #15122a;
+  --apricot: #ffb17a;
+  --persimmon: #ff714f;
+  --text: #fff6ef;
+  --muted: #b6b0d4;
+  --frame: #221e3d;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: var(--w);
+  height: var(--h);
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(255, 113, 79, 0.22), transparent 70%),
+    radial-gradient(800px 600px at 105% 20%, rgba(255, 177, 122, 0.12), transparent 70%),
+    radial-gradient(1200px 700px at 50% 130%, rgba(92, 78, 170, 0.45), transparent 70%),
+    var(--ink);
+  position: relative;
+}
+
+/* Faint dot grid for texture. */
+body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(to bottom, black, transparent 65%);
+  pointer-events: none;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+.brand img { width: 28px; height: 28px; }
+
+h1 {
+  margin: 0;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+  color: var(--text);
+}
+h1 em {
+  font-style: normal;
+  background: linear-gradient(92deg, var(--apricot), var(--persimmon));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sub {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+/* Centered headline over a bleeding browser frame. */
+.hero {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.hero h1 { font-size: 58px; }
+.hero .sub { font-size: 22px; max-width: 880px; }
+
+/* Browser-like window around a raw capture. */
+.window {
+  position: absolute;
+  border-radius: 14px;
+  background: var(--frame);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 30px 80px -20px rgba(0, 0, 0, 0.7),
+    0 12px 30px -10px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.window.light { background: #eceaf3; box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 30px 80px -20px rgba(0,0,0,.75), 0 12px 30px -10px rgba(0,0,0,.5); }
+.chrome {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+.chrome i {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+}
+.light .chrome i { background: rgba(38, 33, 68, 0.18); }
+.chrome .url {
+  margin-left: 14px;
+  flex: 0 1 560px;
+  height: 24px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12.5px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.light .chrome .url { background: rgba(38, 33, 68, 0.07); color: rgba(38, 33, 68, 0.6); }
+
+.shot {
+  position: relative;
+  overflow: hidden;
+}
+.shot > img.raw {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  image-rendering: auto;
+}
+
+/* Callout ring around a UI element in a capture. */
+.ring {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 2.5px var(--persimmon),
+    0 0 0 6px rgba(255, 113, 79, 0.22),
+    0 0 26px 2px rgba(255, 113, 79, 0.4);
+  pointer-events: none;
+}
+
+.pill {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: var(--violet);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 0 0 1px rgba(255, 177, 122, 0.35), 0 10px 30px -6px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+.pill b { color: var(--apricot); font-weight: 650; }

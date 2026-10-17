@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="size" content="1400x560">
+<link rel="stylesheet" href="base.css">
+<style>
+:root { --w: 1400px; --h: 560px; }
+.copy { position:absolute; left:84px; top:0; bottom:0; width:470px; display:flex; flex-direction:column; justify-content:center; gap:18px; }
+.copy .brand { font-size:19px; }
+.copy .brand img { width:36px; height:36px; }
+.copy h1 { font-size:60px; }
+.copy .sub { font-size:21px; }
+</style>
+</head>
+<body>
+  <div class="copy">
+    <span class="brand"><img src="../../assets/logo.svg" alt="">GitHub HTML Preview</span>
+    <h1>See the page, <em>not the markup</em></h1>
+    <p class="sub">Run and compare HTML files right on GitHub, pinned to the exact commit.</p>
+  </div>
+  <div class="window light" style="left:610px; top:70px; width:900px;">
+    <div class="chrome"><i></i><i></i><i></i><span class="url">github.com/bwghughes/cognitivelayer/pull/2/files</span></div>
+    <div class="shot" data-src="pr-split-light" data-crop="345,64,1047,800" data-ring="previewTab" data-ring-pad="3" style="width:900px"></div>
+  </div>
+  <script src="shot.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="size" content="1280x800">
+<link rel="stylesheet" href="base.css">
+<style>:root { --w: 1280px; --h: 800px; }
+.popup { position:absolute; border-radius:12px; overflow:hidden; box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 30px 70px -10px rgba(0,0,0,.8); }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <span class="brand"><img src="../../assets/logo.svg" alt="">GitHub HTML Preview</span>
+    <h1>Private repos. <em>No tokens.</em></h1>
+    <p class="sub">Uses your signed-in GitHub session. Previews run in an isolated sandbox.</p>
+  </div>
+  <div class="window" style="left:70px; top:262px; width:900px;">
+    <div class="chrome"><i></i><i></i><i></i><span class="url">github.com/Crepify/metrik/blob/ee22dca/index.html</span></div>
+    <div class="shot" data-src="blob-preview-dark" data-crop="330,290,1090,610" data-ring="previewTab" style="width:900px"></div>
+  </div>
+  <div class="popup" style="left:880px; top:262px; width:330px;">
+    <div class="shot" data-src="popup-dark" data-crop="0,0,320,512" style="width:330px"></div>
+  </div>
+  <script src="shot.js"></script>
+</body>
+</html>

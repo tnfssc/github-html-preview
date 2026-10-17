@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="size" content="440x280">
+<link rel="stylesheet" href="base.css">
+<style>
+:root { --w: 440px; --h: 280px; }
+body::before { background-size: 16px 16px; }
+.mark { position:absolute; left:26px; top:28px; width:52px; height:52px; }
+.copy { position:absolute; left:26px; top:96px; width:212px; }
+.copy .name { font-size:13px; font-weight:600; color:var(--muted); letter-spacing:-0.005em; margin-bottom:8px; }
+.copy h1 { font-size:28px; line-height:1.06; letter-spacing:-0.035em; }
+.window { border-radius:10px; }
+.chrome { height:22px; gap:5px; padding:0 9px; }
+.chrome i { width:7px; height:7px; }
+</style>
+</head>
+<body>
+  <img class="mark" src="../../assets/logo.svg" alt="">
+  <div class="copy">
+    <div class="name">GitHub HTML Preview</div>
+    <h1>See the page, <em>not the markup</em></h1>
+  </div>
+  <div class="window light" style="left:252px; top:58px; width:290px;">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="shot" data-src="blob-preview-light" data-crop="337,298,560,560" data-ring="previewTab" data-ring-pad="0" style="width:290px"></div>
+  </div>
+  <script src="shot.js"></script>
+</body>
+</html>
