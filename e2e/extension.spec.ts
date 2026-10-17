@@ -379,6 +379,9 @@ test('full preview executes public repository scripts only inside sandbox', asyn
     );
     const sandbox = await sandboxElement?.contentFrame();
     expect(sandbox).not.toBeNull();
+    // The frame fills the tab below the header instead of the 150px default.
+    const frameBox = await sandboxElement!.boundingBox();
+    expect(frameBox!.height).toBeGreaterThan(fullPage.viewportSize()!.height / 2);
     await expect
       .poll(() => requested.includes(`${rawBase}/reports/weekly/app.js`))
       .toBe(true);
@@ -1574,7 +1577,7 @@ test('popup enable setting updates an already-open GitHub page', async () => {
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
     const enabled = popup.getByRole('checkbox', {
-      name: 'Show previews on GitHub HTML files and pull requests',
+      name: 'Show previews',
     });
     await expect(enabled).toBeChecked();
     await enabled.uncheck();
@@ -1852,10 +1855,15 @@ test('blob view choice survives different files and reloads without loading hidd
     await settings.goto('chrome-extension://' + extensionId + '/popup.html');
     await page.goto(firstUrl, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-selected', 'true');
+    // Primer paints the selected segment from aria-pressed.
+    await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Code', exact: true })).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('iframe[title="Executable HTML preview"]').contentFrame().locator('#view-title')).toHaveText('Saved view');
     expect(await settings.evaluate("chrome.storage.local.get('blobViewMode')")).toEqual({});
 
     await page.getByRole('button', { name: 'Code', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Code', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('tab', { name: 'Preview' })).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(() => settings.evaluate("chrome.storage.local.get('blobViewMode')")).toEqual({ blobViewMode: 'source' });
     const requestsBeforeCode = scriptRequests;
     // GitHub replaces its DOM while keeping the extension's content script alive.
@@ -1979,12 +1987,12 @@ function githubBlobFixture(
       <div class="react-blob-view-header-sticky">
         <ul class="SegmentedControl" aria-label="File view">
           <li class="native-segment" data-selected data-component="SegmentedControl.Button">
-            <button class="native-segment-button" type="button" aria-current="true" style="--separator-color:transparent">
+            <button class="native-segment-button" type="button" aria-pressed="true" style="--separator-color:transparent">
               <span class="segmentedControl-content"><span class="segmentedControl-text" data-text="Code">Code</span></span>
             </button>
           </li>
           <li class="native-segment" data-component="SegmentedControl.Button">
-            <button class="native-segment-button" type="button" aria-current="false" style="--separator-color:var(--borderColor-default)">
+            <button class="native-segment-button" type="button" aria-pressed="false" style="--separator-color:var(--borderColor-default)">
               <span class="segmentedControl-content"><span class="segmentedControl-text" data-text="Blame">Blame</span></span>
             </button>
           </li>
