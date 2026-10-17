@@ -31,3 +31,7 @@ web-ext.config.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Scratch and raw store captures
+.tmp
+store/raw

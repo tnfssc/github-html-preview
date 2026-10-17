@@ -34,6 +34,7 @@ interface RouteState {
   readonly tab: HTMLElement;
   readonly tabButton: HTMLButtonElement;
   readonly tabBar: HTMLElement;
+  readonly nativeSelectedButton: HTMLButtonElement | null;
   readonly nativeListenerCleanup: Array<() => void>;
   readonly container: HTMLElement;
   readonly previewArea: HTMLElement;
@@ -80,6 +81,9 @@ export default defineContentScript({
       state.render?.destroy();
       void removePreviewSnapshot(state.snapshotId);
       state.nativeListenerCleanup.forEach((cleanup) => cleanup());
+      if (state.active && state.tabBar.isConnected) {
+        setSelectedTab(state.tabBar, state.nativeSelectedButton);
+      }
       if (state.codeView.isConnected) state.codeView.style.removeProperty('display');
       state.tab.remove();
       state.container.remove();
@@ -92,7 +96,7 @@ export default defineContentScript({
       void blobViewModeStorage.setValue(next);
     };
 
-    const showCode = () => {
+    const showCode = (nativeButton: HTMLButtonElement) => {
       if (!state) return;
       state.active = false;
       if (state.resolving && !state.render) {
@@ -100,15 +104,9 @@ export default defineContentScript({
         state.controller = new AbortController();
         state.resolving = null;
       }
-      // Only deselect the Preview tab; GitHub's React state manages native
-      // tab buttons and overrides aria-current/data-selected on re-render.
-      state.tabButton.setAttribute('aria-current', 'false');
-      state.tabButton.setAttribute('aria-selected', 'false');
-      state.tabButton.style.setProperty(
-        '--separator-color',
-        'var(--borderColor-default)',
-      );
-      state.tab.removeAttribute('data-selected');
+      // React only writes aria-pressed when its own selection changes, so a
+      // click on the already-selected native tab must restore it here.
+      setSelectedTab(state.tabBar, nativeButton);
       state.container.style.setProperty('display', 'none', 'important');
       state.codeView.style.removeProperty('display');
       debugLog('blob', 'show-code', { path: state.repoRef.path });
@@ -184,6 +182,13 @@ export default defineContentScript({
       container.append(header, details, previewArea);
       blob.appendChild(container);
 
+      const nativeSelectedButton =
+        Array.from(tabBar.querySelectorAll<HTMLButtonElement>('button')).find(
+          (candidate) =>
+            candidate !== button &&
+            (candidate.getAttribute('aria-pressed') === 'true' ||
+              candidate.getAttribute('aria-current') === 'true'),
+        ) ?? null;
       const nativeListenerCleanup: Array<() => void> = [];
       state = {
         generation: routeGeneration,
@@ -196,6 +201,7 @@ export default defineContentScript({
         tab,
         tabButton: button,
         tabBar,
+        nativeSelectedButton,
         nativeListenerCleanup,
         container,
         previewArea,
@@ -223,7 +229,7 @@ export default defineContentScript({
         if (nativeButton === button) continue;
         const listener = () => {
           rememberViewMode('source');
-          showCode();
+          showCode(nativeButton);
         };
         nativeButton.addEventListener('click', listener);
         nativeListenerCleanup.push(() =>
@@ -582,6 +588,7 @@ function createPreviewTab(
   button.setAttribute('aria-controls', previewId);
   button.setAttribute('aria-selected', 'false');
   button.setAttribute('aria-current', 'false');
+  button.setAttribute('aria-pressed', 'false');
   button.style.setProperty(
     '--separator-color',
     'var(--borderColor-default)',
@@ -612,6 +619,8 @@ function setSelectedTab(
     tabBar.querySelectorAll<HTMLButtonElement>('button'),
   )) {
     const selected = button === selectedButton;
+    // Primer styles the selected segment from aria-pressed.
+    button.setAttribute('aria-pressed', String(selected));
     button.setAttribute('aria-current', String(selected));
     if (button.closest('li')?.classList.contains(PREVIEW_TAB_CLASS)) {
       button.setAttribute('aria-selected', String(selected));
