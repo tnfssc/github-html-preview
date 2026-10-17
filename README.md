@@ -5,7 +5,6 @@
 <h1 align="center">GitHub HTML Preview</h1>
 
 <p align="center">
-  <strong>See the page, not the markup.</strong><br>
   Run any <code>.html</code> file right on GitHub, and review HTML pull requests side by side, before and after.
 </p>
 
