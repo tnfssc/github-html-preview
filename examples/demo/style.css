@@ -4,8 +4,8 @@
   --violet: #262144;
   --ink: #14112a;
   --ink-2: #1b1736;
-  --apricot: #ffb17a;
-  --persimmon: #ff714f;
+  --apricot: #8ef5d0;
+  --persimmon: #3fc8f2;
   --lilac: #b7a9ff;
   --cream: #fff3e6;
   --text: #f4efff;
@@ -804,7 +804,7 @@ h3 {
 }
 
 @keyframes shimmer {
-  0%, 100% { fill: #ffb17a; }
+  0%, 100% { fill: #8ef5d0; }
   50% { fill: #ffd2a8; }
 }
 
