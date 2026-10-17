@@ -9,5 +9,6 @@ This directory contains the product-discovery research for the GitHub HTML Previ
 | [existing-solutions.md](existing-solutions.md) | Existing extensions, bookmarklets, and community proposals. |
 | [extension-testing.md](extension-testing.md) | Playwright-based E2E testing for browser extensions. |
 | [security-model.md](security-model.md) | Sandboxing, isolation, and store-policy risks. |
+| [behavior.md](behavior.md) | Detailed product behavior, SSO boundaries, requirements, and scroll sync. |
 
 For the consolidated product direction, see [`PRODUCT.md`](../PRODUCT.md) in the repo root.
