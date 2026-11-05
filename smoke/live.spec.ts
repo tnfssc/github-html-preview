@@ -86,7 +86,9 @@ test('current GitHub blob UI renders repository CSS in a sandboxed preview', asy
     });
     await expect(nextFile).toBeVisible({ timeout: liveTimeout });
     await nextFile.click();
-    await expect(page).toHaveURL(/\/getting-started\/index\.html$/);
+    await expect(page).toHaveURL(/\/getting-started\/index\.html$/, {
+      timeout: liveTimeout,
+    });
 
     const refreshedFrame = page
       .locator(
